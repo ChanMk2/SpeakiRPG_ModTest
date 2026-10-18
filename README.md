@@ -1,2 +1,1 @@
-# SpeakiRPG_ModTest
-SpeakiRPG Mod Test
+SpeakiRPG Mod Mobile Client Test
