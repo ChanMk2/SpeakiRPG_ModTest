@@ -30,6 +30,16 @@ if (window.speakiMod)
 
 const isElectronEnv = typeof window.electronAPI !== "undefined" || (typeof navigator !== "undefined" && /electron/i.test(navigator.userAgent || ""));
 const isSpeakiMobile = typeof window.speakiMobile !== "undefined";
+
+function spkmodIsMobile() {
+	if (typeof window.speakiMobile !== "undefined") return true;
+	if (typeof navigator !== "undefined" && /mobi|android|iphone|ipad|ipod/i.test(navigator.userAgent || "")) return true;
+	if (typeof window.matchMedia === "function" && window.matchMedia("(pointer: coarse)").matches && navigator.maxTouchPoints > 0) return true;
+	if (typeof document !== "undefined" && document.body && document.body.classList.contains("sr-mobile-layout")) return true;
+	return false;
+}
+window.spkmodIsMobile = spkmodIsMobile;
+
 if (!isElectronEnv && !isSpeakiMobile) {
 	if (document.body) {
 		const acTranslations = {
@@ -1028,8 +1038,14 @@ function buildElement(tag, characteristics, inner, callback) {
 
 function findNametagSprite(container) {
 	if (!container) return null;
+	if (container.__spkmodNametagSprite && container.__spkmodNametagSprite.isSprite) {
+		return container.__spkmodNametagSprite;
+	}
 	const direct = container.children?.[0]?.children?.[0]?.children?.[1];
-	if (direct && direct.isSprite) return direct;
+	if (direct && direct.isSprite) {
+		container.__spkmodNametagSprite = direct;
+		return direct;
+	}
 
 	let sprite = null;
 	if (typeof container.traverse === "function") {
@@ -1039,6 +1055,7 @@ function findNametagSprite(container) {
 			}
 		});
 	}
+	if (sprite) container.__spkmodNametagSprite = sprite;
 	return sprite;
 }
 
@@ -1123,21 +1140,6 @@ var lunHideVerboseChat = (window.localStorage && localStorage.getItem("spkmod-hi
 function setHideVerboseChat(enabled) {
 	lunHideVerboseChat = !!enabled;
 	if (window.localStorage) localStorage.setItem("spkmod-hide-verbose-chat", String(lunHideVerboseChat));
-}
-
-var lunFixRender = (window.localStorage && localStorage.getItem("spkmod-fix-render")) === "true";
-window.spkmodFixRender = lunFixRender;
-
-function lunFixRenderLabel() {
-	const v = t("fixRenderingToggleLabel");
-	return v === "fixRenderingToggleLabel" ? "Fix Rendering Issues" : v;
-}
-
-function setFixRender(enabled) {
-	lunFixRender = !!enabled;
-	window.spkmodFixRender = lunFixRender;
-	if (window.localStorage) localStorage.setItem("spkmod-fix-render", String(lunFixRender));
-	try { window.dispatchEvent(new Event("resize")); } catch (_) {}
 }
 
 var lunTranslateEnabled = (window.localStorage && localStorage.getItem("spkmod-translate-enabled")) === "true";
@@ -1440,6 +1442,11 @@ var lunPanelElements = {
 	hideKnownBotsToggleInput: null,
 	disableRightClickPinningLabel: null,
 	disableRightClickPinningToggleInput: null,
+	fixRenderRow: null,
+	renderScaleLabel: null,
+	renderScaleInput: null,
+	discordRpcLabel: null,
+	discordRpcToggleInput: null,
 	settingsCatGeneral: null,
 	settingsCatHUD: null,
 	localEffectsBtn: null,
@@ -1539,14 +1546,14 @@ function fetchFriendsList(force = false) {
 		mode: "cors"
 	}).then(async res => {
 		if (!res.ok) {
-			return fetch("/api/friend/list", { method: "GET", headers: headers, mode: "cors" })
+			return fetch(targetUrl, { method: "GET", headers: headers, mode: "cors" })
 				.then(r => r.ok ? r.json() : null)
 				.then(d => d && applyFriendData(d));
 		}
 		const data = await res.json();
 		applyFriendData(data);
 	}).catch(() => {
-		fetch("/api/friend/list", { method: "GET", headers: headers, mode: "cors" })
+		fetch(targetUrl, { method: "GET", headers: headers, mode: "cors" })
 			.then(r => r.ok ? r.json() : null)
 			.then(d => d && applyFriendData(d))
 			.catch(err => {
@@ -1584,6 +1591,7 @@ function setMentionPingEnabled(enabled) {
 }
 
 function playPingSound() {
+    if (typeof isGameMuted === "function" && isGameMuted()) return;
     // Use the native game audio URL for the mention ping
     try {
         const pingAudio = new window.Audio("https://speakirpg.overture.io.kr/audio/voice/speaki/No.mp3");
@@ -2142,6 +2150,278 @@ function setDisableRightClickPinning(disabled) {
 	}
 }
 
+var isMobClient = typeof spkmodIsMobile === "function" ? spkmodIsMobile() : false;
+var lunRenderScale = 1;
+if (isMobClient && window.localStorage) {
+	const v = parseFloat(localStorage.getItem("spkmod-render-scale"));
+	if (v >= 1 && v <= 3) lunRenderScale = v;
+} else if (window.localStorage) {
+	try { localStorage.removeItem("spkmod-render-scale"); } catch (_) {}
+}
+window.spkmodRenderScale = lunRenderScale;
+
+function lunRenderScaleLabel() {
+	const v = t("renderScaleLabel");
+	const base = (!v || v === "renderScaleLabel") ? "Render Quality" : v;
+	return base + ": " + (lunRenderScale <= 1 ? "Off" : "x" + lunRenderScale.toFixed(2));
+}
+
+function setRenderScale(value) {
+	const isMob = typeof spkmodIsMobile === "function" ? spkmodIsMobile() : false;
+	if (!isMob) {
+		lunRenderScale = 1;
+		window.spkmodRenderScale = 1;
+		return;
+	}
+	const v = parseFloat(value);
+	lunRenderScale = (v >= 1 && v <= 3) ? v : 1;
+	window.spkmodRenderScale = lunRenderScale;
+	if (window.localStorage) localStorage.setItem("spkmod-render-scale", String(lunRenderScale));
+	try { window.dispatchEvent(new Event("resize")); } catch (_) {}
+}
+
+var lunDiscordRpcEnabled = (window.localStorage && localStorage.getItem("spkmod-discord-rpc")) !== "false";
+function setDiscordRpcEnabled(enabled) {
+	lunDiscordRpcEnabled = !!enabled;
+	if (window.localStorage) localStorage.setItem("spkmod-discord-rpc", lunDiscordRpcEnabled ? "true" : "false");
+	if (lunPanelElements.discordRpcToggleInput) {
+		lunPanelElements.discordRpcToggleInput.checked = lunDiscordRpcEnabled;
+	}
+	if (window.electronAPI && typeof window.electronAPI.setDiscordRpc === "function") {
+		window.electronAPI.setDiscordRpc(lunDiscordRpcEnabled);
+	}
+}
+
+if (typeof window !== "undefined" && window.electronAPI && typeof window.electronAPI.setDiscordRpc === "function") {
+	window.electronAPI.setDiscordRpc(lunDiscordRpcEnabled);
+}
+
+var lunIsMuted = (window.localStorage && localStorage.getItem("spkmod-muted")) === "true";
+var lunMuteMinimizedEnabled = (window.localStorage && localStorage.getItem("spkmod-mute-minimized")) === "true";
+var isMutedByMinimize = false;
+
+function isGameMuted() {
+	return lunIsMuted || isMutedByMinimize;
+}
+
+function updateMuteButtonUI() {
+	const muted = isGameMuted();
+	const icon = muted ? "🔇" : "🔊";
+	const tip = muted ? (t("unmuteBtnTooltip") || "Unmute Game") : (t("muteBtnTooltip") || "Mute Game");
+	if (typeof lunPanelElements !== "undefined" && lunPanelElements.muteBtn) {
+		lunPanelElements.muteBtn.innerText = icon;
+		lunPanelElements.muteBtn.title = tip;
+	}
+	const mobileBtn = document.getElementById("spkmod-mobile-mute-toggle");
+	if (mobileBtn) {
+		mobileBtn.innerText = icon;
+	}
+}
+
+function findGameMuteCheckbox() {
+	const rows = document.querySelectorAll(".sr-panel__row");
+	for (const row of rows) {
+		const checkbox = row.querySelector("input[type='checkbox']");
+		const span = row.querySelector("span");
+		if (checkbox && span) {
+			const txt = (span.textContent || "").trim().toLowerCase();
+			if (
+				txt === "mute all" ||
+				txt.includes("mute") ||
+				txt.includes("음소거") ||
+				txt.includes("ミュート") ||
+				txt.includes("靜音") ||
+				txt.includes("静音") ||
+				txt.includes("silenciar")
+			) {
+				return checkbox;
+			}
+		}
+	}
+	return null;
+}
+
+function hookNativeMuteCheckbox() {
+	const cb = findGameMuteCheckbox();
+	if (cb && !cb.__spkmodMuteHooked) {
+		cb.__spkmodMuteHooked = true;
+		cb.addEventListener("change", () => {
+			if (!isMutedByMinimize) {
+				lunIsMuted = cb.checked;
+				if (window.localStorage) {
+					localStorage.setItem("spkmod-muted", lunIsMuted ? "true" : "false");
+				}
+				updateMuteButtonUI();
+			}
+		});
+		// Sync on startup if preference is stored
+		if (lunIsMuted && !cb.checked) {
+			cb.click();
+		} else if (!lunIsMuted && cb.checked) {
+			lunIsMuted = true;
+			if (window.localStorage) localStorage.setItem("spkmod-muted", "true");
+			updateMuteButtonUI();
+		}
+	}
+}
+
+function applyGameMuteState(muted) {
+	// 1. Native game settings DOM checkbox:
+	const cb = findGameMuteCheckbox();
+	if (cb) {
+		if (cb.checked !== !!muted) {
+			cb.click();
+		}
+		if (cb.checked !== !!muted) {
+			cb.checked = !!muted;
+			cb.dispatchEvent(new Event("change", { bubbles: true }));
+		}
+	}
+
+	// 2. Direct GameState settings updater if exposed:
+	if (typeof window.updateGameSettings === "function") {
+		try { window.updateGameSettings({ muteAll: !!muted }); } catch (_) {}
+	}
+
+	// 3. Fallbacks: HTML5 media elements & Howler (from California Girls audio controller)
+	try {
+		document.querySelectorAll("audio, video").forEach(el => {
+			el.muted = !!muted;
+		});
+		if (typeof window.Howler !== "undefined") {
+			if (muted) {
+				if (window.__speakiOrigHowlerVol === undefined) window.__speakiOrigHowlerVol = Howler.volume();
+				Howler.volume(0);
+			} else {
+				Howler.volume(window.__speakiOrigHowlerVol !== undefined ? window.__speakiOrigHowlerVol : 1.0);
+			}
+		}
+	} catch (_) {}
+
+	updateMuteButtonUI();
+}
+
+function setGameMuted(muted, save = true) {
+	lunIsMuted = !!muted;
+	if (save && window.localStorage) {
+		localStorage.setItem("spkmod-muted", lunIsMuted ? "true" : "false");
+	}
+	// Manual user action clears any minimize-override
+	isMutedByMinimize = false;
+	applyGameMuteState(lunIsMuted);
+}
+
+function toggleGameMute() {
+	setGameMuted(!lunIsMuted);
+}
+
+function setMuteMinimized(enabled) {
+	lunMuteMinimizedEnabled = !!enabled;
+	if (window.localStorage) {
+		localStorage.setItem("spkmod-mute-minimized", lunMuteMinimizedEnabled ? "true" : "false");
+	}
+	if (typeof lunPanelElements !== "undefined" && lunPanelElements.muteMinimizedToggleInput) {
+		lunPanelElements.muteMinimizedToggleInput.checked = lunMuteMinimizedEnabled;
+	}
+	if (!lunMuteMinimizedEnabled && isMutedByMinimize) {
+		isMutedByMinimize = false;
+		applyGameMuteState(lunIsMuted);
+	}
+}
+
+function handleMinimizeState(isMinimized) {
+	if (!lunMuteMinimizedEnabled) return;
+
+	if (isMinimized) {
+		if (!lunIsMuted && !isMutedByMinimize) {
+			isMutedByMinimize = true;
+			applyGameMuteState(true);
+		}
+	} else {
+		if (isMutedByMinimize) {
+			isMutedByMinimize = false;
+			applyGameMuteState(lunIsMuted);
+		}
+	}
+}
+
+// Hook visibilitychange for web browser and mobile
+if (typeof document !== "undefined") {
+	document.addEventListener("visibilitychange", () => {
+		handleMinimizeState(document.hidden);
+	});
+}
+
+// Hook Electron IPC for window minimize/restore
+if (typeof window !== "undefined" && window.electronAPI && typeof window.electronAPI.onWindowMinimized === "function") {
+	try {
+		window.electronAPI.onWindowMinimized((isMin) => {
+			handleMinimizeState(isMin);
+		});
+	} catch (_) {}
+}
+
+// Hook game's internal settings updater to keep mod UI synchronized with in-game sound settings
+function hookGameSettings() {
+	if (typeof window.updateGameSettings === "function" && !window.updateGameSettings.__spkmodHooked) {
+		const origUpdate = window.updateGameSettings;
+		window.updateGameSettings = function(newSettings) {
+			const res = origUpdate.apply(this, arguments);
+			if (newSettings && typeof newSettings.muteAll === "boolean" && !isMutedByMinimize) {
+				if (lunIsMuted !== newSettings.muteAll) {
+					lunIsMuted = newSettings.muteAll;
+					if (window.localStorage) localStorage.setItem("spkmod-muted", lunIsMuted ? "true" : "false");
+					updateMuteButtonUI();
+				}
+			}
+			return res;
+		};
+		window.updateGameSettings.__spkmodHooked = true;
+	}
+}
+
+// Ensure saved mute preference is applied as soon as game settings become available
+setInterval(() => {
+	hookGameSettings();
+	hookNativeMuteCheckbox();
+	if (typeof window.getGameSettings === "function" && !window.__spkmodAudioInitialized) {
+		window.__spkmodAudioInitialized = true;
+		if (lunIsMuted) {
+			applyGameMuteState(true);
+		}
+	}
+}, 500);
+
+// Global Console Commands for easy testing
+window.spkmodMute = function(muted) {
+	if (typeof muted === "undefined") muted = !isGameMuted();
+	setGameMuted(muted);
+	console.log(`[SpeakiMod+] Game audio ${muted ? "MUTED 🔇" : "UNMUTED 🔊"}`);
+	return muted;
+};
+window.toggleGameMute = toggleGameMute;
+window.setGameMuted = setGameMuted;
+window.isGameMuted = isGameMuted;
+window.testMute = function() {
+	const cb = findGameMuteCheckbox();
+	const report = {
+		checkboxFound: !!cb,
+		checkboxChecked: cb ? cb.checked : null,
+		lunIsMuted: lunIsMuted,
+		isMutedByMinimize: isMutedByMinimize,
+		updateGameSettingsAvailable: typeof window.updateGameSettings === "function",
+		getGameSettingsAvailable: typeof window.getGameSettings === "function"
+	};
+	if (console.table) {
+		console.table(report);
+	} else {
+		console.log("[SpeakiMod+] testMute report:", report);
+	}
+	const targetState = !isGameMuted();
+	window.spkmodMute(targetState);
+	return `Result: Toggled audio to ${targetState ? "MUTED" : "UNMUTED"}`;
+};
+
 // Ensure the class is added early on load
 if (typeof document !== "undefined" && lunPanelLeft) {
     document.body.classList.add("spkmod-panel-left-mode");
@@ -2336,7 +2616,8 @@ function makeDraggable(element, handles) {
 					const leftNum = parseFloat(parsedPos.left);
 					if (!isNaN(topNum) && !isNaN(leftNum)) {
 						const minTop = (element.id === "spkmod-hud") ? 0 : 35;
-						const clampedTop = Math.max(minTop, Math.min(topNum, window.innerHeight - 45));
+						const maxTop = Math.max(minTop, window.innerHeight - (element.id === "spkmod-hud" ? 45 : 120));
+						const clampedTop = Math.max(minTop, Math.min(topNum, maxTop));
 						const clampedLeft = Math.max(0, Math.min(leftNum, window.innerWidth - 60));
 						element.style.top = clampedTop + "px";
 						element.style.left = clampedLeft + "px";
@@ -2493,6 +2774,121 @@ function makeDraggable(element, handles) {
 	});
 }
 
+function makeResizable(element, handle, options = {}) {
+	if (!element || !handle) return;
+	if (element.__spkmodResizable) return;
+	element.__spkmodResizable = true;
+
+	const minW = options.minWidth || 340;
+	const minH = options.minHeight || 260;
+	const sizeKey = options.storageKey || (element.id ? ("spkmod-size-" + element.id) : null);
+
+	// Restore saved size if available
+	if (sizeKey && window.localStorage) {
+		try {
+			const saved = localStorage.getItem(sizeKey);
+			if (saved) {
+				const parsed = JSON.parse(saved);
+				if (parsed && parsed.width && parsed.height) {
+					const curMaxW = Math.round(window.innerWidth * 0.98);
+					const curMaxH = Math.round(window.innerHeight * 0.95);
+					const w = Math.max(minW, Math.min(curMaxW, parseInt(parsed.width, 10)));
+					const h = Math.max(minH, Math.min(curMaxH, parseInt(parsed.height, 10)));
+					element.style.width = w + "px";
+					element.style.height = h + "px";
+				}
+			}
+		} catch (_) {}
+	}
+
+	let isResizing = false;
+	let startPointerX = 0, startPointerY = 0;
+	let startWidth = 0, startHeight = 0;
+	let currentScale = 1;
+
+	function onPointerDown(e) {
+		if (e.button !== undefined && e.button !== 0) return;
+		e.stopPropagation();
+		e.preventDefault();
+
+		const scaleVar = getComputedStyle(element).getPropertyValue("--spkmod-scale");
+		currentScale = parseFloat(scaleVar) || 1;
+
+		const rect = element.getBoundingClientRect();
+		startWidth = rect.width / currentScale;
+		startHeight = rect.height / currentScale;
+		startPointerX = e.clientX;
+		startPointerY = e.clientY;
+		isResizing = true;
+
+		if (handle.setPointerCapture && e.pointerId) {
+			try { handle.setPointerCapture(e.pointerId); } catch (_) {}
+		}
+
+		document.body.style.userSelect = "none";
+		document.body.style.cursor = "nwse-resize";
+
+		window.addEventListener("pointermove", onPointerMove, true);
+		window.addEventListener("pointerup", onPointerUp, true);
+		window.addEventListener("pointercancel", onPointerUp, true);
+		window.addEventListener("mousemove", onPointerMove, true);
+		window.addEventListener("mouseup", onPointerUp, true);
+	}
+
+	function onPointerMove(e) {
+		if (!isResizing) return;
+		e.stopPropagation();
+		e.preventDefault();
+
+		const deltaX = (e.clientX - startPointerX) / currentScale;
+		const deltaY = (e.clientY - startPointerY) / currentScale;
+
+		const curMaxW = Math.round(window.innerWidth * 0.98);
+		const curMaxH = Math.round(window.innerHeight * 0.95);
+
+		const newWidth = Math.round(Math.max(minW, Math.min(curMaxW, startWidth + deltaX)));
+		const newHeight = Math.round(Math.max(minH, Math.min(curMaxH, startHeight + deltaY)));
+
+		element.style.width = newWidth + "px";
+		element.style.height = newHeight + "px";
+
+		if (typeof options.onResize === "function") {
+			options.onResize(newWidth, newHeight);
+		}
+	}
+
+	function onPointerUp(e) {
+		if (!isResizing) return;
+		isResizing = false;
+		e.stopPropagation();
+		e.preventDefault();
+
+		document.body.style.userSelect = "";
+		document.body.style.cursor = "";
+
+		window.removeEventListener("pointermove", onPointerMove, true);
+		window.removeEventListener("pointerup", onPointerUp, true);
+		window.removeEventListener("pointercancel", onPointerUp, true);
+		window.removeEventListener("mousemove", onPointerMove, true);
+		window.removeEventListener("mouseup", onPointerUp, true);
+
+		if (e && e.pointerId && handle.releasePointerCapture) {
+			try { handle.releasePointerCapture(e.pointerId); } catch (_) {}
+		}
+
+		if (sizeKey && window.localStorage) {
+			const rect = element.getBoundingClientRect();
+			const finalW = Math.round(rect.width / currentScale);
+			const finalH = Math.round(rect.height / currentScale);
+			localStorage.setItem(sizeKey, JSON.stringify({ width: finalW, height: finalH }));
+		}
+	}
+
+	handle.addEventListener("pointerdown", onPointerDown);
+	handle.addEventListener("mousedown", onPointerDown);
+}
+window.makeResizable = makeResizable;
+
 function positionModalNicely(modal) {
 	if (!modal) return;
 	bringToFront(modal);
@@ -2501,7 +2897,11 @@ function positionModalNicely(modal) {
 	const hasSavedPos = !!(posKey && window.localStorage && localStorage.getItem(posKey));
 	const hasBeenDragged = modal.dataset.userDragged === "true";
 
-	if (hasSavedPos || (hasBeenDragged && modal.style.left && modal.style.top)) {
+	const curTop = parseFloat(modal.style.top);
+	const curLeft = parseFloat(modal.style.left);
+	const isOffscreen = isNaN(curTop) || isNaN(curLeft) || curTop > (window.innerHeight - 80) || curLeft > (window.innerWidth - 80) || curTop < 0;
+
+	if (!isOffscreen && (hasSavedPos || hasBeenDragged) && modal.style.left && modal.style.top) {
 		return;
 	}
 
@@ -2563,7 +2963,7 @@ function resetWindowPositions() {
 			const keysToRemove = [];
 			for (let i = 0; i < localStorage.length; i++) {
 				const k = localStorage.key(i);
-				if (k && (k.startsWith("spkmod-pos-") || k === "spkmod-window-pos")) {
+				if (k && (k.startsWith("spkmod-pos-") || k.startsWith("spkmod-size-") || k === "spkmod-window-pos")) {
 					keysToRemove.push(k);
 				}
 			}
@@ -2600,6 +3000,11 @@ function resetWindowPositions() {
 			m.style.top = "";
 		}
 	});
+
+	if (lunHudElements.bbsModal) {
+		lunHudElements.bbsModal.style.width = "520px";
+		lunHudElements.bbsModal.style.height = "480px";
+	}
 
 	if (lunHudElements.bbsModal && !lunHudElements.bbsModal.classList.contains("hidden")) {
 		const modalWidth = lunHudElements.bbsModal.offsetWidth || 520;
@@ -2650,6 +3055,7 @@ const SPKMOD_SETTINGS_KEYS = new Set([
 	"spkmod-custom-hud-bg",
 	"spkmod-custom-hud-unlocked",
 	"spkmod-disable-right-click-pinning",
+	"spkmod-discord-rpc",
 	"spkmod-drone-speed",
 	"spkmod-exp-interval-minutes",
 	"spkmod-exp-per-hour",
@@ -2671,6 +3077,8 @@ const SPKMOD_SETTINGS_KEYS = new Set([
 	"spkmod-low-hp-warning",
 	"spkmod-mention-enabled",
 	"spkmod-mention-ping",
+	"spkmod-mute-minimized",
+	"spkmod-muted",
 	"spkmod-name-presets",
 	"spkmod-outgoing-source-lang",
 	"spkmod-panel-left",
@@ -3996,8 +4404,13 @@ document.head.appendChild(buildElement(
 			max-width: 95vw;
 		}
 		#spkmod-bbs-modal {
+			position: fixed !important;
 			width: 520px;
-			max-width: 96vw;
+			min-width: 360px;
+			min-height: 280px;
+			max-width: 98vw;
+			max-height: 94vh;
+			overflow: hidden !important;
 		}
 		#spkmod-effects-modal {
 			width: 960px;
@@ -4163,7 +4576,13 @@ document.body.appendChild(lunHudElements.lowHpOverlay);
 			}
 		});
 
+		const muteBtn = createToggleBtn("spkmod-mobile-mute-toggle", (typeof isGameMuted === "function" && isGameMuted()) ? "🔇" : "🔊", (e) => {
+			e.preventDefault();
+			if (typeof toggleGameMute === "function") toggleGameMute();
+		});
+
 		mobileBtnContainer.appendChild(eyeBtn);
+		mobileBtnContainer.appendChild(muteBtn);
 		mobileBtnContainer.appendChild(settingsBtn);
 		mobileBtnContainer.appendChild(panelBtn);
 		document.body.appendChild(mobileBtnContainer);
@@ -5068,6 +5487,16 @@ document.body.appendChild(
 			buildElement("div", {
 				className: "spkmod-panel-cat"
 			}, [
+				lunPanelElements.muteBtn = buildElement("button", {
+					id: "spkmod-mute-btn",
+					className: "spkmod-panel-btn",
+					style: "flex: 1; height: 28px; padding: 0; display: inline-flex; align-items: center; justify-content: center; font-size: 12pt; cursor: pointer;",
+					innerText: (typeof isGameMuted === "function" && isGameMuted()) ? "🔇" : "🔊",
+					title: (typeof isGameMuted === "function" && isGameMuted()) ? (t("unmuteBtnTooltip") || "Unmute Game") : (t("muteBtnTooltip") || "Mute Game"),
+					onclick: _ => {
+						if (typeof toggleGameMute === "function") toggleGameMute();
+					}
+				}),
 				lunPanelElements.invisibleBtn = buildElement("button", {
 					id: "spkmod-invisible-ghost-btn",
 					className: "spkmod-panel-btn",
@@ -5315,17 +5744,21 @@ document.body.appendChild(
 						}
 					})
 				]),
-				buildElement("div", { className: "spkmod-panel-cat" }, [
-					lunPanelElements.fixRenderToggleLabel = buildElement("span", {
-						style: "color: #fff; font-size: 11px; font-weight: bold; user-select: none; flex: 1;",
-						innerText: lunFixRenderLabel()
+				lunPanelElements.fixRenderRow = buildElement("div", { className: "spkmod-panel-cat",
+					style: (typeof spkmodIsMobile === "function" && spkmodIsMobile()) ? "" : "display: none !important;"
+				}, [
+					lunPanelElements.renderScaleLabel = buildElement("span", {
+						style: "color: #fff; font-size: 11px; font-weight: bold; flex: 1;",
+						innerText: lunRenderScaleLabel()
 					}),
-					lunPanelElements.fixRenderToggleInput = buildElement("input", {
-						type: "checkbox",
-						checked: lunFixRender,
-						onchange: e => {
-							setFixRender(e.target.checked);
-						}
+					lunPanelElements.renderScaleInput = buildElement("input", {
+						type: "range", min: "1", max: "3", step: "0.05", value: lunRenderScale,
+						style: "width: 70px;",
+						oninput: e => {
+							lunRenderScale = parseFloat(e.target.value);
+							if (lunPanelElements.renderScaleLabel) lunPanelElements.renderScaleLabel.innerText = lunRenderScaleLabel();
+						},
+						onchange: e => { setRenderScale(e.target.value); }
 					})
 				]),
 				buildElement("div", { className: "spkmod-panel-cat" }, [
@@ -5489,6 +5922,32 @@ document.body.appendChild(
 								window.spkmodSendTelemetryPing();
 							}
 						}
+					})
+				]),
+				buildElement("div", { className: "spkmod-panel-cat" }, [
+					lunPanelElements.discordRpcLabel = buildElement("span", {
+						style: "color: #fff; font-size: 11px; font-weight: bold; flex: 1;",
+						innerText: t("discordRpcToggleLabel") || "Discord Activity (RPC)",
+						title: "Share your game status and level on Discord (Desktop Client)"
+					}),
+					lunPanelElements.discordRpcToggleInput = buildElement("input", {
+						type: "checkbox",
+						checked: lunDiscordRpcEnabled,
+						title: "Share your game status and level on Discord (Desktop Client)",
+						onchange: e => setDiscordRpcEnabled(e.target.checked)
+					})
+				]),
+				buildElement("div", { className: "spkmod-panel-cat" }, [
+					lunPanelElements.muteMinimizedLabel = buildElement("span", {
+						style: "color: #fff; font-size: 11px; font-weight: bold; flex: 1;",
+						innerText: t("muteMinimizedToggleLabel") || "Mute Game when Minimized",
+						title: "Automatically mute game audio when the window is minimized or hidden"
+					}),
+					lunPanelElements.muteMinimizedToggleInput = buildElement("input", {
+						type: "checkbox",
+						checked: lunMuteMinimizedEnabled,
+						title: "Automatically mute game audio when the window is minimized or hidden",
+						onchange: e => setMuteMinimized(e.target.checked)
 					})
 				])
 			]),
@@ -7023,7 +7482,14 @@ if (typeof spkmodI18nRenderers !== 'undefined') {
     spkmodI18nRenderers.push(() => {
         if (typeof lunPanelElements !== 'undefined') {
             if (lunPanelElements.telemetryToggleLabel) lunPanelElements.telemetryToggleLabel.innerText = t("telemetrySettingLabel");
+            if (lunPanelElements.muteMinimizedLabel) lunPanelElements.muteMinimizedLabel.innerText = t("muteMinimizedToggleLabel") || "Mute Game when Minimized";
+            if (lunPanelElements.renderScaleLabel && typeof lunRenderScaleLabel === "function") lunPanelElements.renderScaleLabel.innerText = lunRenderScaleLabel();
+            if (lunPanelElements.fixRenderRow) {
+                const isMob = typeof spkmodIsMobile === "function" && spkmodIsMobile();
+                lunPanelElements.fixRenderRow.style.setProperty("display", isMob ? "" : "none", isMob ? "" : "important");
+            }
         }
+        if (typeof updateMuteButtonUI === "function") updateMuteButtonUI();
         const emojiBtn = document.getElementById("spkmod-emoji-btn");
         if (emojiBtn) {
             emojiBtn.title = t("emojiRemovedTooltip", "Removed by developer request, our apologies for the inconvenience, click for the feedback icon");
@@ -12890,6 +13356,14 @@ var lunBbsCooldownUntil = 0;
 var lunBbsTranslations = {};
 var lunBbsReplyTarget = null;
 var lunBbsLastReadId = parseInt((window.localStorage && localStorage.getItem("spkmod-bbs-last-read-id")) || "0", 10);
+var lunBbsHeartedPostIds = new Set();
+try {
+	const rawHearted = localStorage.getItem("spkmod-bbs-hearted-ids");
+	if (rawHearted) {
+		const parsed = JSON.parse(rawHearted);
+		if (Array.isArray(parsed)) lunBbsHeartedPostIds = new Set(parsed);
+	}
+} catch (_) {}
 
 function escapeBbsHtml(text) {
 	if (!text) return '';
@@ -13240,46 +13714,50 @@ function updateBbsComposerState() {
 
 window.toggleBbsModal = function() {
 	if (!lunHudElements.bbsModal) return;
-	const isClosed = lunHudElements.bbsModal.classList.contains("hidden");
-	if (isClosed) {
-		if (typeof positionModalNicely === "function") positionModalNicely(lunHudElements.bbsModal);
-		lunHudElements.bbsModal.classList.remove("hidden");
-		updateBbsComposerState();
-		if (typeof applyBbsThemeVisuals === "function") applyBbsThemeVisuals();
-		if (bbsModalElements.postsContainer) {
-			bbsModalElements.postsContainer.scrollTop = 0;
-		}
-		const badge = document.getElementById("spkmod-bbs-btn-badge");
-		if (badge) badge.remove();
-		fetchBbsPosts();
-		if (!lunBbsPollTimer) {
-			lunBbsPollTimer = setInterval(() => {
-				if (lunHudElements.bbsModal && !lunHudElements.bbsModal.classList.contains("hidden")) {
-					fetchBbsPosts(true);
-				}
-			}, 15000);
-		}
-	} else {
-		lunHudElements.bbsModal.classList.add("hidden");
-		if (typeof lunEmojiPreviewTooltip !== "undefined" && lunEmojiPreviewTooltip) {
-			lunEmojiPreviewTooltip.style.display = "none";
-		}
-		if (window.lunEmojiTargetInput === bbsModalElements.input) {
-			if (typeof lunEmojiPickerPanel !== "undefined" && lunEmojiPickerPanel) {
-				lunEmojiPickerPanel.remove();
-				lunEmojiPickerPanel = null;
+	try {
+		const isClosed = lunHudElements.bbsModal.classList.contains("hidden");
+		if (isClosed) {
+			if (typeof positionModalNicely === "function") positionModalNicely(lunHudElements.bbsModal);
+			lunHudElements.bbsModal.classList.remove("hidden");
+			updateBbsComposerState();
+			if (typeof applyBbsThemeVisuals === "function") applyBbsThemeVisuals();
+			if (bbsModalElements.postsContainer) {
+				bbsModalElements.postsContainer.scrollTop = 0;
 			}
-			window.lunEmojiTargetInput = null;
+			const badge = document.getElementById("spkmod-bbs-btn-badge");
+			if (badge) badge.remove();
+			fetchBbsPosts();
+			if (!lunBbsPollTimer) {
+				lunBbsPollTimer = setInterval(() => {
+					if (lunHudElements.bbsModal && !lunHudElements.bbsModal.classList.contains("hidden")) {
+						fetchBbsPosts(true);
+					}
+				}, 15000);
+			}
+		} else {
+			lunHudElements.bbsModal.classList.add("hidden");
+			if (typeof lunEmojiPreviewTooltip !== "undefined" && lunEmojiPreviewTooltip) {
+				lunEmojiPreviewTooltip.style.display = "none";
+			}
+			if (window.lunEmojiTargetInput === bbsModalElements.input) {
+				if (typeof lunEmojiPickerPanel !== "undefined" && lunEmojiPickerPanel) {
+					lunEmojiPickerPanel.remove();
+					lunEmojiPickerPanel = null;
+				}
+				window.lunEmojiTargetInput = null;
+			}
+			markBbsPostsAsRead();
+			if (lunBbsPollTimer) {
+				clearInterval(lunBbsPollTimer);
+				lunBbsPollTimer = null;
+			}
+			if (lunBbsSeenTimer) {
+				clearTimeout(lunBbsSeenTimer);
+				lunBbsSeenTimer = null;
+			}
 		}
-		markBbsPostsAsRead();
-		if (lunBbsPollTimer) {
-			clearInterval(lunBbsPollTimer);
-			lunBbsPollTimer = null;
-		}
-		if (lunBbsSeenTimer) {
-			clearTimeout(lunBbsSeenTimer);
-			lunBbsSeenTimer = null;
-		}
+	} catch (err) {
+		console.error("[SpeakiMod+] Error in toggleBbsModal:", err);
 	}
 };
 
@@ -13693,6 +14171,7 @@ function renderBbsPosts() {
 	}
 
 	const wasAtTop = container.scrollTop <= 40;
+	const prevScrollTop = container.scrollTop;
 	container.innerHTML = "";
 	const unreadCutoff = lunBbsLastReadId;
 
@@ -13825,6 +14304,38 @@ function renderBbsPosts() {
 			setBbsReplyTarget(post.id, post.username);
 		};
 		actionsSpan.appendChild(replyBtn);
+
+		// Heart / Like button with counter
+		const heartBtn = document.createElement("button");
+		heartBtn.className = "spkmod-bbs-heart-btn";
+		const heartCount = (typeof post.hearts === "number") ? post.hearts : 0;
+		const isHearted = lunBbsHeartedPostIds.has(post.id);
+		const heartIcon = isHearted ? "❤️" : "🤍";
+
+		heartBtn.title = isHearted ? (t("bbsUnheart") || "Remove heart") : (t("bbsHeart") || "Heart this reply");
+		heartBtn.innerHTML = `<span style="font-size: ${Math.max(8.5, baseFs - 1.5)}px; line-height: 1;">${heartIcon}</span><span style="font-size: ${btnFs}px; font-weight: 600; line-height: 1; margin-left: 2px;">${heartCount}</span>`;
+
+		const heartBg = isHearted ? "rgba(239, 68, 68, 0.22)" : "rgba(255, 255, 255, 0.08)";
+		const heartBorder = isHearted ? "rgba(239, 68, 68, 0.45)" : "rgba(255, 255, 255, 0.15)";
+		const heartColor = isHearted ? "#fca5a5" : curTheme.anchorColor;
+
+		heartBtn.style.cssText = `background: ${heartBg}; border: 1px solid ${heartBorder}; color: ${heartColor}; border-radius: 3px; font-size: ${btnFs}px; padding: 0 4px; height: 16px; cursor: pointer; line-height: 14px; display: inline-flex; align-items: center; user-select: none; transition: transform 0.12s ease, background 0.15s ease;`;
+
+		heartBtn.onpointerdown = (e) => { e.stopPropagation(); };
+		heartBtn.onmousedown = (e) => { e.stopPropagation(); };
+		heartBtn.onmouseenter = () => {
+			heartBtn.style.transform = "scale(1.08)";
+			if (!isHearted) heartBtn.style.background = "rgba(255, 255, 255, 0.14)";
+		};
+		heartBtn.onmouseleave = () => {
+			heartBtn.style.transform = "scale(1)";
+			heartBtn.style.background = heartBg;
+		};
+		heartBtn.onclick = (e) => {
+			e.stopPropagation();
+			toggleBbsHeart(post.id, heartBtn);
+		};
+		actionsSpan.appendChild(heartBtn);
 
 		// Translate button
 		const transBtn = document.createElement("button");
@@ -14054,6 +14565,8 @@ function renderBbsPosts() {
 
 	if (wasAtTop) {
 		container.scrollTop = 0;
+	} else {
+		container.scrollTop = prevScrollTop;
 	}
 }
 
@@ -14244,17 +14757,75 @@ async function deleteBbsPost(postId) {
 	}
 }
 
+async function toggleBbsHeart(postId, btnEl) {
+	const post = Array.isArray(lunBbsPosts) && lunBbsPosts.find(p => p.id === postId);
+	if (!post) return;
+
+	const me = getMyBbsInfo();
+	const wasHearted = lunBbsHeartedPostIds.has(postId);
+	const nextHearted = !wasHearted;
+
+	// 1. Optimistic local UI update
+	if (nextHearted) {
+		lunBbsHeartedPostIds.add(postId);
+		post.hearts = (typeof post.hearts === "number" ? post.hearts : 0) + 1;
+	} else {
+		lunBbsHeartedPostIds.delete(postId);
+		post.hearts = Math.max(0, (typeof post.hearts === "number" ? post.hearts : 1) - 1);
+	}
+	if (window.localStorage) {
+		localStorage.setItem("spkmod-bbs-hearted-ids", JSON.stringify(Array.from(lunBbsHeartedPostIds)));
+	}
+
+	if (btnEl) {
+		btnEl.style.transform = "scale(1.25)";
+		setTimeout(() => { if (btnEl) btnEl.style.transform = "scale(1)"; }, 120);
+	}
+	renderBbsPosts();
+
+	// 2. Synchronize with BBS server
+	try {
+		const sUrl = getBbsServerUrl();
+		const res = await fetch(`${sUrl}/api/bbs/heart`, {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({
+				postId: postId,
+				username: me.username,
+				playerId: me.playerId
+			})
+		});
+		if (res.ok) {
+			const data = await res.json();
+			if (data && data.success && typeof data.hearts === "number") {
+				post.hearts = data.hearts;
+				if (data.userHearted) {
+					lunBbsHeartedPostIds.add(postId);
+				} else {
+					lunBbsHeartedPostIds.delete(postId);
+				}
+				if (window.localStorage) {
+					localStorage.setItem("spkmod-bbs-hearted-ids", JSON.stringify(Array.from(lunBbsHeartedPostIds)));
+				}
+				renderBbsPosts();
+			}
+		}
+	} catch (err) {
+		console.warn("[SpeakiMod+] Failed to sync BBS heart reaction:", err);
+	}
+}
+
 document.body.appendChild(
 	lunHudElements.bbsModal = buildElement("div", {
 		id: "spkmod-bbs-modal",
 		className: "hidden",
-		style: "max-height: 80vh; display: flex; flex-direction: column; gap: 6px; padding: 8px 10px;"
+		style: "display: flex; flex-direction: column; gap: 6px; padding: 8px 10px; box-sizing: border-box; min-width: 360px; min-height: 280px; max-height: 94vh;"
 	}, [
 		// Header row
 		bbsModalElements.headerRow = buildElement("div", {
 			id: "spkmod-bbs-header-row",
 			className: "spkmod-panel-cat",
-			style: "justify-content: space-between; align-items: center; margin-bottom: 2px; cursor: move; user-select: none;"
+			style: "justify-content: space-between; align-items: center; margin-bottom: 2px; cursor: move; user-select: none; flex-shrink: 0;"
 		}, [
 			buildElement("div", { style: "display: flex; align-items: center; gap: 6px; cursor: move; user-select: none;" }, [
 				bbsModalElements.headerTitle = buildElement("span", {
@@ -14409,15 +14980,15 @@ document.body.appendChild(
 		// Posts container
 		bbsModalElements.postsContainer = buildElement("div", {
 			id: "spkmod-bbs-posts",
-			style: "display: flex; flex-direction: column; gap: 6px; max-height: 52vh; min-height: 220px; overflow-y: auto; padding-right: 3px; scrollbar-width: thin;"
+			style: "display: flex; flex-direction: column; gap: 6px; flex: 1 1 auto; min-height: 120px; max-height: none; overflow-y: auto; padding-right: 3px; scrollbar-width: thin;"
 		}),
 		// Status feedback
 		bbsModalElements.statusMsg = buildElement("div", {
-			style: "color: #f87171; font-size: 10px; text-align: center; display: none; padding: 2px 0;"
+			style: "color: #f87171; font-size: 10px; text-align: center; display: none; padding: 2px 0; flex-shrink: 0;"
 		}),
 		// Composer bottom
 		buildElement("div", {
-			style: "display: flex; flex-direction: column; gap: 4px; padding-top: 4px; border-top: 1px solid rgba(255,255,255,0.1);"
+			style: "display: flex; flex-direction: column; gap: 4px; padding-top: 4px; border-top: 1px solid rgba(255,255,255,0.1); flex-shrink: 0;"
 		}, [
 			buildElement("div", { style: "display: flex; justify-content: space-between; align-items: center; margin-bottom: 2px;" }, [
 				bbsModalElements.emojiBtn = buildElement("button", {
@@ -14518,9 +15089,30 @@ document.body.appendChild(
 				style: "width: 100%; height: 26px; padding: 0; background: #2563eb; color: #fff; border: 1px solid rgba(255,255,255,0.2); border-radius: 5px; font-weight: bold; font-size: 11px; cursor: pointer;",
 				onclick: () => sendBbsPost()
 			})
+		]),
+		// Corner resize handle
+		bbsModalElements.resizeHandle = buildElement("div", {
+			id: "spkmod-bbs-resize-handle",
+			title: t("bbsResizeTooltip") || "Drag to resize window",
+			style: "position: absolute; right: 0; bottom: 0; width: 16px; height: 16px; cursor: nwse-resize; user-select: none; z-index: 100; display: flex; align-items: flex-end; justify-content: flex-end; padding: 0 2px 2px 0; touch-action: none;"
+		}, [
+			buildElement("span", {
+				innerHTML: `<svg viewBox="0 0 10 10" width="10" height="10" style="opacity: 0.55; display: block; pointer-events: none;"><path d="M9 1 L1 9 M9 5 L5 9 M9 9 L9 9" stroke="#94a3b8" stroke-width="1.5" stroke-linecap="round"/></svg>`,
+				style: "pointer-events: none; display: flex;"
+			})
 		])
 	])
 );
+if (bbsModalElements.resizeHandle) {
+	bbsModalElements.resizeHandle.onmouseenter = () => {
+		const p = bbsModalElements.resizeHandle.querySelector("path");
+		if (p) p.setAttribute("stroke", "#38bdf8");
+	};
+	bbsModalElements.resizeHandle.onmouseleave = () => {
+		const p = bbsModalElements.resizeHandle.querySelector("path");
+		if (p) p.setAttribute("stroke", "#94a3b8");
+	};
+}
 updateBbsComposerState();
 applyBbsThemeVisuals();
 function updateBbsI18n() {
@@ -14562,6 +15154,16 @@ if (typeof spkmodI18nRenderers !== "undefined") {
 setTimeout(() => {
 	if (typeof makeDraggable === 'function' && lunHudElements.bbsModal && (bbsModalElements.headerRow || bbsModalElements.headerTitle)) {
 		makeDraggable(lunHudElements.bbsModal, [bbsModalElements.headerRow, bbsModalElements.headerTitle].filter(Boolean));
+	}
+	if (typeof makeResizable === 'function' && lunHudElements.bbsModal && bbsModalElements.resizeHandle) {
+		makeResizable(lunHudElements.bbsModal, bbsModalElements.resizeHandle, {
+			minWidth: 360,
+			minHeight: 280
+		});
+	}
+	if (lunHudElements.bbsModal && !(window.localStorage && localStorage.getItem("spkmod-size-spkmod-bbs-modal"))) {
+		lunHudElements.bbsModal.style.width = "520px";
+		lunHudElements.bbsModal.style.height = "480px";
 	}
 	if (lunHudElements.bbsModal) {
 		// Prevent scrolling inside the BBS modal from zooming the game camera
@@ -15938,7 +16540,7 @@ spkmodI18nRenderers.push(() => {
 	setText(lunPanelElements.settingsHeader, t("settingsHeader"));
 	if (lunPanelElements.filterToggleLabel) setText(lunPanelElements.filterToggleLabel, t("filterToggleLabel"));
 	if (lunPanelElements.verboseChatToggleLabel) setText(lunPanelElements.verboseChatToggleLabel, t("hideVerboseChatToggleLabel") || "Hide Mod Chat Messages");
-	if (lunPanelElements.fixRenderToggleLabel) setText(lunPanelElements.fixRenderToggleLabel, lunFixRenderLabel());
+	if (lunPanelElements.renderScaleLabel) setText(lunPanelElements.renderScaleLabel, lunRenderScaleLabel());
 	if (lunPanelElements.gmChatToggleLabel) setText(lunPanelElements.gmChatToggleLabel, t("gmChatToggleLabel"));
 	if (lunPanelElements.friendChatToggleLabel) setText(lunPanelElements.friendChatToggleLabel, t("friendChatToggleLabel"));
 	if (lunPanelElements.mentionAlertToggleLabel) setText(lunPanelElements.mentionAlertToggleLabel, t("mentionAlertToggleLabel"));
@@ -15988,6 +16590,7 @@ spkmodI18nRenderers.push(() => {
 	}
 	if (lunPanelElements.gamepadRumbleLabel) setText(lunPanelElements.gamepadRumbleLabel, t("gamepadRumbleToggleLabel"));
 	if (lunPanelElements.disableRightClickPinningLabel) setText(lunPanelElements.disableRightClickPinningLabel, t("disableRightClickPinningLabel") || "Disable Right-Click Pinning");
+	if (lunPanelElements.discordRpcLabel) setText(lunPanelElements.discordRpcLabel, t("discordRpcToggleLabel") || "Discord Activity (RPC)");
 	if (lunPanelElements.uiScaleLabel) setText(lunPanelElements.uiScaleLabel, t("uiScaleLabel"));
 	if (lunPanelElements.gameUiScaleLabel) setText(lunPanelElements.gameUiScaleLabel, t("gameUiScaleLabel") || "Game UI Scale");
 	if (lunPanelElements.droneSpeedLabel) setText(lunPanelElements.droneSpeedLabel, t("droneSpeedLabel") || "Drone Speed");
@@ -16427,10 +17030,13 @@ async function fetchAllQuests() {
 		const headers = { "Content-Type": "application/json" };
 		if (token) headers["authorization"] = `Bearer ${token}`;
 
+		const endpoint = window.lunActiveApiEndpoint ||
+		                 (window.speakiServerEndpoint ? window.speakiServerEndpoint : "") ||
+		                 "https://relay.overture.io.kr";
 		const periods = ["daily", "weekly", "permanent"];
 		for (const p of periods) {
 			try {
-				const res = await fetch(`/api/quests?period=${p}`, {
+				const res = await fetch(`${endpoint}/api/quests?period=${p}`, {
 					method: "GET",
 					headers: headers,
 					credentials: "include"
@@ -16740,6 +17346,7 @@ if (typeof spkmodI18nRenderers !== 'undefined') {
 }
 
 function tick() {
+	if (window.__spkmodPauseTick) return;
 	if (lunTickCount % 20 === 0) spkmodAvatarController.sync();
 	if (!window.__gameStateHooked && typeof gameState !== "undefined" && gameState) {
 		if (typeof hookGameStateOnce === "function") {
@@ -17143,7 +17750,10 @@ function tick() {
 		const headers = { "Content-Type": "application/json" };
 		if (token) headers["authorization"] = `Bearer ${token}`;
 
-		fetch(`/api/quests?period=${period}`, {
+		const endpoint = window.lunActiveApiEndpoint ||
+		                 (window.speakiServerEndpoint ? window.speakiServerEndpoint : "") ||
+		                 "https://relay.overture.io.kr";
+		fetch(`${endpoint}/api/quests?period=${period}`, {
 			method: "GET",
 			headers: headers,
 			credentials: "include"

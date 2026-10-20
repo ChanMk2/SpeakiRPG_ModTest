@@ -1,4 +1,17 @@
-try { window.spkmodFixRender = localStorage.getItem("spkmod-fix-render") === "true"; } catch (_) { window.spkmodFixRender = false; }
+try {
+	const isMobile = typeof window.speakiMobile !== "undefined" ||
+		(typeof navigator !== "undefined" && /mobi|android|iphone|ipad|ipod/i.test(navigator.userAgent || "")) ||
+		(typeof window.matchMedia === "function" && window.matchMedia("(pointer: coarse)").matches && navigator.maxTouchPoints > 0);
+	if (!isMobile) {
+		window.spkmodRenderScale = 1;
+		try { localStorage.removeItem("spkmod-render-scale"); } catch (_) {}
+	} else {
+		const v = parseFloat(localStorage.getItem("spkmod-render-scale"));
+		window.spkmodRenderScale = (v >= 1 && v <= 3) ? v : 1;
+	}
+} catch (_) {
+	window.spkmodRenderScale = 1;
+}
 
 window.injectSpeakiMod = () => {
 	if (window.__speakiModInjected) {
@@ -10,7 +23,7 @@ window.injectSpeakiMod = () => {
 	window.__speakiModInjected = true;
 	setTimeout(async () => {
 		try {
-			const modCode = await (await fetch("https://raw.githubusercontent.com/ChanMk2/SpeakiRPG_ModTest/refs/heads/main/SpeakiMod.js")).text();
+			const modCode = await (await fetch("https://raw.githubusercontent.com/DJTOMATO/SpeakiRPG/refs/heads/main/SpeakiMod.js?t=" + Date.now())).text();
 
 			const blob = URL.createObjectURL(
 				new Blob([modCode], { type: "text/javascript" })
@@ -38,13 +51,16 @@ async function patchScript(og, src) {
 	// Identify minified i18n and questManager functions
 	const m_i18n = (code.match(/function (\w+?)\(e\)\s*\{\s*let \w+\s*=\s*\w+\[\w+\(\)\];\s*return Object\.prototype\.hasOwnProperty.call\(\w+,\s*e\)\s*\?\s*\w+\[e\]\s*:/) || [])[1] || "null";
 	const m_questManager = (code.match(/new\s*(\w+)\({\s*container:\s*e,\s*showToast:\s*e\s*=>\s*\w+\.setStatus\(e\),\s*onClaimSuccess:\s*\(\)\s*=>\s*{\s*\w+\.markStale\(\),\s*\w+\.markStale\(\),\s*\w+\(\)\s*}/) || [])[1] || "null";
+	const m_settingsMatch = code.match(/case[\x60'"]muteAll[\x60'"]\s*:\s*(\w+)\(\{muteAll:!(\w+)\(\)\.muteAll\}\)/) || [];
+	const m_updateSettings = m_settingsMatch[1] || "null";
+	const m_getSettings = m_settingsMatch[2] || "null";
 
 	code = code.replace(
-		/if\((\w+)\(\)\)(\w+)=(\w+)\(\)\.resolutionScale;else\{let (\w+)=window\.devicePixelRatio;/,
-		(_m, isMobileLayout, e, getSettings, dpr) =>
-			`if(${isMobileLayout}()&&!window.spkmodFixRender)${e}=${getSettings}().resolutionScale;else{let ${dpr}=window.devicePixelRatio;`
+		/function (\w+)\(\)\{let (\w+);if\((\w+)\(\)\)(\w+)=(\w+)\(\)\.resolutionScale;else\{let (\w+)=window\.devicePixelRatio;/,
+		(_m, fn, e, isMobileLayout, e2, getSettings, dpr) =>
+			`function ${fn}(){if(window.spkmodRenderScale>1&&${isMobileLayout}())return Math.min(window.spkmodRenderScale,4);let ${e};if(${isMobileLayout}())${e2}=${getSettings}().resolutionScale;else{let ${dpr}=window.devicePixelRatio;`
 	);
-	
+
 	// 1. Rewrite relative asset imports to absolute URLs
 	code = code.replaceAll(/from\s*"\.\//g, 'from "https://speakirpg.overture.io.kr/assets/');
 
@@ -52,20 +68,22 @@ async function patchScript(og, src) {
 	// Layer A: Internal GameState method hook on connect(e)
 	const reqChannelPattern = /connect\(([^)]*)\)\s*\{\s*this\.requestedChannel\s*=/;
 	if (reqChannelPattern.test(code)) {
-		code = code.replace(reqChannelPattern, `connect($1){window.speakiInjectorVer = 2; window.gameState = this; window.i18n = ${m_i18n}; window.questManager = ${m_questManager}; this.requestedChannel=`);
+		code = code.replace(reqChannelPattern, `connect($1){window.speakiInjectorVer = 2; window.gameState = this; window.i18n = ${m_i18n}; window.questManager = ${m_questManager}; window.getGameSettings = ${m_getSettings}; window.updateGameSettings = ${m_updateSettings}; this.requestedChannel=`);
 	}
 
 	// Layer B: Internal GameState method hook on handleLogin(e)
 	const handleLoginPattern = /handleLogin\(([^)]*)\)\s*\{/;
 	if (handleLoginPattern.test(code)) {
-		code = code.replace(handleLoginPattern, `handleLogin($1){window.gameState = this; if (typeof window.injectSpeakiMod === "function") window.injectSpeakiMod();`);
+		code = code.replace(handleLoginPattern, `handleLogin($1){window.gameState = this; window.getGameSettings = ${m_getSettings}; window.updateGameSettings = ${m_updateSettings}; if (typeof window.injectSpeakiMod === "function") window.injectSpeakiMod();`);
 	}
 
 	// Layer C: External connect invocation hook (supports ;, :, ,, or ) before .connect)
 	const callerPattern = /([;:,]|\)\s*)\s*((\w+)\.connect\(\w+\)),/;
 	if (callerPattern.test(code)) {
-		code = code.replace(callerPattern, `$1((window.speakiInjectorVer = 2), (window.gameState = $3), (window.i18n = ${m_i18n}), (window.questManager = ${m_questManager}), $2),`);
+		code = code.replace(callerPattern, `$1((window.speakiInjectorVer = 2), (window.gameState = $3), (window.i18n = ${m_i18n}), (window.questManager = ${m_questManager}), (window.getGameSettings = ${m_getSettings}), (window.updateGameSettings = ${m_updateSettings}), $2),`);
 	}
+
+	code += `\ntry { window.getGameSettings = ${m_getSettings}; window.updateGameSettings = ${m_updateSettings}; } catch (_) {}\n`;
 
 	const blob = URL.createObjectURL(
 		new Blob([code], { type: "text/javascript" })
