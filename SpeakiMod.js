@@ -11488,8 +11488,10 @@ function zoomMapAt(px, py, factor) {
 function layoutMapModal() {
     const m = mapModalElements.modalWindow, c = mapModalElements.canvas;
     if (!m || !c) return;
-    const small = window.innerWidth < 1100 || (typeof spkmodIsMobile === "function" && spkmodIsMobile());
-    mapView.small = small;
+    const small = typeof spkmodIsMobile === "function" && spkmodIsMobile();
+	mapView.small = small;
+	if (mapModalElements.centerBtn) mapModalElements.centerBtn.style.display = small ? "" : "none";
+	if (mapModalElements.fitBtn) mapModalElements.fitBtn.style.display = small ? "" : "none";
     if (!small) {
         mapView.viewW = MAP_LW; mapView.viewH = MAP_LH; mapView.dpr = 1;
         mapView.zoom = 1; mapView.panX = 0; mapView.panY = 0;
@@ -11857,13 +11859,15 @@ document.body.appendChild(
 			style: "border: 1px solid #666; border-radius: 4px; background: #080808; width: 1000px; max-width: none;"
 		}),
 		buildElement("div", { style: "display: flex; gap: 8px; margin-top: 12px; align-items: center;" }, [
-			buildElement("button", {
-				innerText: "📍", title: "My position",
+			mapModalElements.centerBtn = buildElement("button", {
+				innerText: "📍",
+				title: "My position",
 				style: "padding: 8px 14px; min-height: 40px; cursor: pointer; background: #333; color: #fff; border: 1px solid #555; border-radius: 4px; font-weight: bold;",
 				onclick: () => { mapView.needCenter = true; }
 			}),
-			buildElement("button", {
-				innerText: "⤢", title: "Fit whole map",
+			mapModalElements.fitBtn = buildElement("button", {
+				innerText: "⤢",
+				title: "Fit whole map",
 				style: "padding: 8px 14px; min-height: 40px; cursor: pointer; background: #333; color: #fff; border: 1px solid #555; border-radius: 4px; font-weight: bold;",
 				onclick: () => { mapView.needFit = true; }
 			}),
