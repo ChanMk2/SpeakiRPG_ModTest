@@ -11492,8 +11492,17 @@ function layoutMapModal() {
         mapView.zoom = 1; mapView.panX = 0; mapView.panY = 0;
     } else {
         mapView.dpr = Math.min(window.devicePixelRatio || 1, 2);
-        mapView.viewW = Math.max(200, Math.min(MAP_LW, window.innerWidth - 16 - 24));
-        mapView.viewH = Math.max(150, Math.min(MAP_LH, Math.round(window.innerHeight * 0.45)));
+		if (window.innerHeight >= window.innerWidth) {
+			mapView.viewW = Math.max(200, Math.min(MAP_LW, window.innerWidth - 24));
+			mapView.viewH = Math.max(150, Math.min(MAP_LH, Math.round(window.innerHeight * 0.45)));
+		} else {
+			mapView.viewH = Math.max(150, Math.min(MAP_LH, window.innerHeight - 110));
+			mapView.viewW = Math.max(200, Math.min(MAP_LW, window.innerWidth - 24, Math.round(mapView.viewH * 1.8)));
+		}
+		if (mapModalElements.titleLabel) {
+			mapModalElements.titleLabel.style.fontSize = "14px";
+			mapModalElements.titleLabel.style.marginBottom = "6px";
+		}
         m.style.position = "fixed";
         m.style.boxSizing = "border-box";
         m.style.padding = "10px";
