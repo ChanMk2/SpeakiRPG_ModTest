@@ -3060,7 +3060,7 @@ const SPKMOD_SETTINGS_KEYS = new Set([
 	"spkmod-exp-interval-minutes",
 	"spkmod-exp-per-hour",
 	"spkmod-filter-enabled",
-	"spkmod-fix-render",
+	"spkmod-render-scale",
 	"spkmod-fp-pitch",
 	"spkmod-fps-ping",
 	"spkmod-friend-highlight-enabled",
