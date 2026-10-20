@@ -2163,7 +2163,8 @@ window.spkmodResolutionOverride = lunResolutionOverride;
 function lunResolutionOverrideLabel() {
 	const v = t("resolutionOverrideLabel");
 	const base = (!v || v === "resolutionOverrideLabel") ? "Resolution Override" : v;
-	return base + ": " + (lunResolutionOverride <= 1 ? "Off" : "x" + lunResolutionOverride.toFixed(2));
+	const offText = t("resolutionOverrideOff") || "Off";
+	return base + ": " + (lunResolutionOverride <= 1 ? offText : "x" + lunResolutionOverride.toFixed(2));
 }
 
 function setResolutionOverride(value) {
@@ -2180,6 +2181,12 @@ function setResolutionOverride(value) {
 	lunResolutionOverride = (v >= 1 && v <= 3) ? v : 1;
 	window.spkmodResolutionOverride = lunResolutionOverride;
 	if (window.localStorage) localStorage.setItem("spkmod-resolution-override", String(lunResolutionOverride));
+	if (lunPanelElements.resolutionOverrideInput) {
+		lunPanelElements.resolutionOverrideInput.value = lunResolutionOverride;
+	}
+	if (lunPanelElements.resolutionOverrideLabel) {
+		lunPanelElements.resolutionOverrideLabel.innerText = lunResolutionOverrideLabel();
+	}
 	try { window.dispatchEvent(new Event("resize")); } catch (_) {}
 }
 
@@ -3063,6 +3070,7 @@ const SPKMOD_SETTINGS_KEYS = new Set([
 	"spkmod-exp-interval-minutes",
 	"spkmod-exp-per-hour",
 	"spkmod-filter-enabled",
+	"spkmod-resolution-override",
 	"spkmod-fp-pitch",
 	"spkmod-fps-ping",
 	"spkmod-friend-highlight-enabled",
@@ -3099,7 +3107,6 @@ const SPKMOD_SETTINGS_KEYS = new Set([
 	"spkmod-pos-spkmod-stats-modal",
 	"spkmod-pumpkin-tracker",
 	"spkmod-reset-timer",
-	"spkmod-resolution-override",
 	"spkmod-separate-panel",
 	"spkmod-session-gold",
 	"spkmod-translate-enabled",
@@ -5030,7 +5037,7 @@ document.body.appendChild(
 				buildElement("input", {
 					type: "range",
 					min: "0.1",
-					max: "2.0",
+					max: "4.0",
 					step: "0.1",
 					value: window.BeyBladeSpeed || 1,
 					style: "width: 100%; height: 3px; accent-color: #fff; cursor: pointer; margin: 4px 0 0 0;",
@@ -5756,11 +5763,17 @@ document.body.appendChild(
 						innerText: lunResolutionOverrideLabel()
 					}),
 					lunPanelElements.resolutionOverrideInput = buildElement("input", {
-						type: "range", min: "1", max: "3", step: "0.05", value: lunResolutionOverride,
-						style: "width: 70px;",
+						type: "range",
+						min: "1",
+						max: "3",
+						step: "0.05",
+						value: lunResolutionOverride,
+						style: "width: 75px; accent-color: #38bdf8; cursor: pointer;",
 						oninput: e => {
 							lunResolutionOverride = parseFloat(e.target.value);
-							if (lunPanelElements.resolutionOverrideLabel) lunPanelElements.resolutionOverrideLabel.innerText = lunResolutionOverrideLabel();
+							if (lunPanelElements.resolutionOverrideLabel) {
+								lunPanelElements.resolutionOverrideLabel.innerText = lunResolutionOverrideLabel();
+							}
 						},
 						onchange: e => {
 							setResolutionOverride(e.target.value);
@@ -11449,9 +11462,122 @@ window.spkmodToggleBurstSpam = function(forceState) {
 const mapModalElements = {};
 let mapUpdateFrame = null;
 
+const MAP_LW = 1000, MAP_LH = 400;
+const mapView = { zoom: 1, panX: 0, panY: 0, viewW: MAP_LW, viewH: MAP_LH, dpr: 1, small: false, needCenter: false, needFit: false };
+
+function mapMinZoom() { return Math.min(mapView.viewW / MAP_LW, mapView.viewH / MAP_LH); }
+
+function clampMapPan() {
+    const cw = MAP_LW * mapView.zoom, ch = MAP_LH * mapView.zoom, m = 30;
+    mapView.panX = cw <= mapView.viewW ? (mapView.viewW - cw) / 2 : Math.max(mapView.viewW - cw - m, Math.min(m, mapView.panX));
+    mapView.panY = ch <= mapView.viewH ? (mapView.viewH - ch) / 2 : Math.max(mapView.viewH - ch - m, Math.min(m, mapView.panY));
+}
+
+function zoomMapAt(px, py, factor) {
+    const nz = Math.max(mapMinZoom(), Math.min(4, mapView.zoom * factor));
+    const f = nz / mapView.zoom;
+    mapView.panX = px - (px - mapView.panX) * f;
+    mapView.panY = py - (py - mapView.panY) * f;
+    mapView.zoom = nz;
+    clampMapPan();
+}
+
+function layoutMapModal() {
+    const m = mapModalElements.modalWindow, c = mapModalElements.canvas;
+    if (!m || !c) return;
+    const small = window.innerWidth < 1100 || (typeof spkmodIsMobile === "function" && spkmodIsMobile());
+    mapView.small = small;
+    if (!small) {
+        mapView.viewW = MAP_LW; mapView.viewH = MAP_LH; mapView.dpr = 1;
+        mapView.zoom = 1; mapView.panX = 0; mapView.panY = 0;
+    } else {
+        mapView.dpr = Math.min(window.devicePixelRatio || 1, 2);
+        mapView.viewW = Math.max(200, Math.min(MAP_LW, window.innerWidth - 16 - 24));
+        mapView.viewH = Math.max(150, Math.min(MAP_LH, Math.round(window.innerHeight * 0.45)));
+        m.style.position = "fixed";
+        m.style.boxSizing = "border-box";
+        m.style.padding = "10px";
+        m.style.maxWidth = "calc(100vw - 8px)";
+        if (mapView.zoom < mapMinZoom()) mapView.zoom = mapMinZoom();
+        clampMapPan();
+    }
+    c.style.width = mapView.viewW + "px";
+    c.style.height = mapView.viewH + "px";
+    c.style.touchAction = "none";
+    c.width = Math.round(mapView.viewW * mapView.dpr);
+    c.height = Math.round(mapView.viewH * mapView.dpr);
+    if (small) {
+        const mw = mapView.viewW + 22;
+        if (m.dataset.userDragged !== "true") {
+            m.style.left = Math.max(4, (window.innerWidth - mw) / 2) + "px";
+            m.style.top = "8px";
+        } else {
+            const r = m.getBoundingClientRect();
+            m.style.left = Math.max(0, Math.min(r.left, window.innerWidth - mw)) + "px";
+            m.style.top = Math.max(0, Math.min(r.top, window.innerHeight - 60)) + "px";
+        }
+    }
+}
+
+function initMapGestures() {
+    const c = mapModalElements.canvas;
+    if (!c || c.__spkmodGestures) return;
+    c.__spkmodGestures = true;
+    const ptrs = new Map();
+    let lastDist = 0, lastMid = null;
+    const local = e => { const r = c.getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top }; };
+    const stop = e => { e.stopPropagation(); };
+    c.addEventListener("pointerdown", e => {
+        stop(e);
+        try { c.setPointerCapture(e.pointerId); } catch (_) {}
+        ptrs.set(e.pointerId, local(e));
+        lastDist = 0; lastMid = null;
+    });
+    c.addEventListener("pointermove", e => {
+        if (!ptrs.has(e.pointerId)) return;
+        stop(e);
+        const prev = ptrs.get(e.pointerId), cur = local(e);
+        ptrs.set(e.pointerId, cur);
+        if (ptrs.size === 1) {
+            mapView.panX += cur.x - prev.x;
+            mapView.panY += cur.y - prev.y;
+            clampMapPan();
+        } else if (ptrs.size === 2) {
+            const [a, b] = [...ptrs.values()];
+            const dist = Math.hypot(a.x - b.x, a.y - b.y) || 1;
+            const mid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+            if (lastDist) {
+                mapView.panX += mid.x - lastMid.x;
+                mapView.panY += mid.y - lastMid.y;
+                zoomMapAt(mid.x, mid.y, dist / lastDist);
+            }
+            lastDist = dist; lastMid = mid;
+        }
+    });
+    const up = e => { stop(e); ptrs.delete(e.pointerId); lastDist = 0; lastMid = null; };
+    c.addEventListener("pointerup", up);
+    c.addEventListener("pointercancel", up);
+    c.addEventListener("wheel", e => {
+        e.preventDefault(); e.stopPropagation();
+        const p = local(e);
+        zoomMapAt(p.x, p.y, Math.exp(-e.deltaY * 0.0015));
+    }, { passive: false });
+}
+
+window.addEventListener("resize", () => {
+    if (mapModalElements.modalWindow && mapModalElements.modalWindow.style.display !== "none") {
+        layoutMapModal();
+        mapView.needCenter = true;
+    }
+});
+
 function openMapModal() {
-	mapModalElements.modalWindow.style.display = "flex";
-	updateMapLoop();
+    mapModalElements.modalWindow.style.display = "flex";
+    initMapGestures();
+    layoutMapModal();
+    if (mapView.small) { mapView.zoom = Math.max(mapMinZoom(), 1); }
+    mapView.needCenter = true;
+    updateMapLoop();
 }
 
 function closeMapModal() {
@@ -11475,10 +11601,11 @@ function updateMapLoop() {
 		return;
 	}
 	const ctx = mapModalElements.canvas.getContext("2d");
-	const w = mapModalElements.canvas.width;
-	const h = mapModalElements.canvas.height;
+	const w = MAP_LW;
+	const h = MAP_LH;
 	
-	ctx.clearRect(0, 0, w, h);
+	ctx.setTransform(1, 0, 0, 1, 0, 0);
+	ctx.clearRect(0, 0, mapModalElements.canvas.width, mapModalElements.canvas.height);
 	
 	const padding = 20;
 	const drawW = w - padding * 2;
@@ -11533,6 +11660,27 @@ function updateMapLoop() {
 			y: zp.y - boxH/2 + pctZ * boxH
 		};
 	};
+
+	if (mapView.needFit) {
+		mapView.zoom = mapMinZoom();
+		mapView.needFit = false;
+		clampMapPan();
+	}
+	if (mapView.needCenter && mapView.small) {
+		const cz = gameState && gameState.zoneId ? gameState.zoneId % 10000 : null;
+		let target = cz !== null && zonePos[cz] ? zonePos[cz] : null;
+		if (target && gameState.playerContainer) {
+			const lp = getLogicalPos(cz, gameState.playerContainer.position.x, gameState.playerContainer.position.z);
+			if (lp) target = lp;
+		}
+		if (target) {
+			mapView.panX = mapView.viewW / 2 - target.x * mapView.zoom;
+			mapView.panY = mapView.viewH / 2 - target.y * mapView.zoom;
+			clampMapPan();
+		}
+		mapView.needCenter = false;
+	}
+	ctx.setTransform(mapView.dpr * mapView.zoom, 0, 0, mapView.dpr * mapView.zoom, mapView.dpr * mapView.panX, mapView.dpr * mapView.panY);
 
 	ctx.strokeStyle = "rgba(255, 200, 50, 0.4)";
 	ctx.lineWidth = 1.5;
@@ -11694,13 +11842,25 @@ document.body.appendChild(
 		mapModalElements.canvas = buildElement("canvas", {
 			width: 1000,
 			height: 400,
-			style: "border: 1px solid #666; border-radius: 4px; background: #080808; width: 1000px;"
+			style: "border: 1px solid #666; border-radius: 4px; background: #080808; width: 1000px; max-width: none;"
 		}),
-		buildElement("button", {
-			innerText: t("closeBtn"),
-			style: "margin-top: 15px; padding: 6px 20px; cursor: pointer; background: #333; color: #fff; border: 1px solid #555; border-radius: 4px; font-weight: bold;",
-			onclick: () => closeMapModal()
-		})
+		buildElement("div", { style: "display: flex; gap: 8px; margin-top: 12px; align-items: center;" }, [
+			buildElement("button", {
+				innerText: "📍", title: "My position",
+				style: "padding: 8px 14px; min-height: 40px; cursor: pointer; background: #333; color: #fff; border: 1px solid #555; border-radius: 4px; font-weight: bold;",
+				onclick: () => { mapView.needCenter = true; }
+			}),
+			buildElement("button", {
+				innerText: "⤢", title: "Fit whole map",
+				style: "padding: 8px 14px; min-height: 40px; cursor: pointer; background: #333; color: #fff; border: 1px solid #555; border-radius: 4px; font-weight: bold;",
+				onclick: () => { mapView.needFit = true; }
+			}),
+			buildElement("button", {
+				innerText: t("closeBtn"),
+				style: "padding: 8px 20px; min-height: 40px; cursor: pointer; background: #333; color: #fff; border: 1px solid #555; border-radius: 4px; font-weight: bold;",
+				onclick: () => closeMapModal()
+			})
+		])
 	])
 );
 
@@ -16113,7 +16273,10 @@ async function translateChatText(text, source, target) {
 			let useFallback = false;
 
 			// Primary API: MyMemory
-			if (typeof lunMyMemoryQuotaHit !== "undefined" && lunMyMemoryQuotaHit) {
+			const isMyMemoryQuotaHit = (typeof lunMyMemoryQuotaHit !== "undefined" && lunMyMemoryQuotaHit) ||
+				(window.localStorage && localStorage.getItem("spkmod-mymemory-quota") === new Date().toDateString());
+
+			if (isMyMemoryQuotaHit) {
 				useFallback = true;
 			} else {
 				try {
@@ -16124,14 +16287,20 @@ async function translateChatText(text, source, target) {
 					const res = await fetch(`https://api.mymemory.translated.net/get?${params}`);
 					if (!res.ok) {
 						useFallback = true;
-						apiStatus = res.status;
+						if (res.status === 429 || res.status === 403) {
+							lunMyMemoryQuotaHit = true;
+							if (typeof window !== "undefined") window.lunMyMemoryQuotaHit = true;
+							if (window.localStorage) localStorage.setItem("spkmod-mymemory-quota", new Date().toDateString());
+							console.log("[SpeakiMod+] MyMemory daily quota reached (HTTP " + res.status + "); seamlessly falling back to Google Translate.");
+						}
 					} else {
 						const data = await res.json();
-						if (res.status === 429 || data?.responseStatus === 429 || data?.responseStatus === 403) {
+						if (data?.responseStatus === 429 || data?.responseStatus === 403) {
 							useFallback = true;
-							apiStatus = 429;
 							lunMyMemoryQuotaHit = true;
+							if (typeof window !== "undefined") window.lunMyMemoryQuotaHit = true;
 							if (window.localStorage) localStorage.setItem("spkmod-mymemory-quota", new Date().toDateString());
+							console.log("[SpeakiMod+] MyMemory daily quota reached; seamlessly falling back to Google Translate.");
 						} else {
 							translated = cleanTranslatedText(data?.responseData?.translatedText);
 							if (!translated || data.responseStatus !== 200) useFallback = true;
@@ -16145,19 +16314,22 @@ async function translateChatText(text, source, target) {
 			// Fallback API: Google Translate
 			if (useFallback) {
 				try {
-					const gtUrl = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=${source}&tl=${target}&dt=t&q=${encodeURIComponent(safeText)}`;
+					const gtTarget = (target === "es-419") ? "es" : target;
+					const gtUrl = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=${encodeURIComponent(gtTarget)}&dt=t&q=${encodeURIComponent(safeText)}`;
 					const gtRes = await fetch(gtUrl);
 					if (gtRes.ok) {
 						const gtData = await gtRes.json();
 						if (gtData && gtData[0]) {
 							translated = "";
 							for (let i = 0; i < gtData[0].length; i++) {
-								if (gtData[0][i][0]) translated += gtData[0][i][0];
+								if (gtData[0][i] && gtData[0][i][0]) translated += gtData[0][i][0];
 							}
 							translated = cleanTranslatedText(translated);
 						}
 					} else {
-						apiStatus = gtRes.status;
+						if (gtRes.status === 429) {
+							apiStatus = 429;
+						}
 					}
 				} catch (err) {
 					console.warn("[SpeakiMod+] Google Translate fallback error:", err);
@@ -16546,7 +16718,7 @@ spkmodI18nRenderers.push(() => {
 	setText(lunPanelElements.settingsHeader, t("settingsHeader"));
 	if (lunPanelElements.filterToggleLabel) setText(lunPanelElements.filterToggleLabel, t("filterToggleLabel"));
 	if (lunPanelElements.verboseChatToggleLabel) setText(lunPanelElements.verboseChatToggleLabel, t("hideVerboseChatToggleLabel") || "Hide Mod Chat Messages");
-	if (lunPanelElements.resolutionOverrideLabel) setText(lunPanelElements.resolutionOverrideLabel, lunResolutionOverrideLabel());
+	if (lunPanelElements.resolutionOverrideLabel && typeof lunResolutionOverrideLabel === "function") setText(lunPanelElements.resolutionOverrideLabel, lunResolutionOverrideLabel());
 	if (lunPanelElements.gmChatToggleLabel) setText(lunPanelElements.gmChatToggleLabel, t("gmChatToggleLabel"));
 	if (lunPanelElements.friendChatToggleLabel) setText(lunPanelElements.friendChatToggleLabel, t("friendChatToggleLabel"));
 	if (lunPanelElements.mentionAlertToggleLabel) setText(lunPanelElements.mentionAlertToggleLabel, t("mentionAlertToggleLabel"));
