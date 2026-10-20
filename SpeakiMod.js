@@ -11463,6 +11463,9 @@ const mapModalElements = {};
 let mapUpdateFrame = null;
 
 const MAP_LW = 1000, MAP_LH = 400;
+const MAP_H_RATIO_PORTRAIT = 0.38;
+const MAP_H_RATIO_LANDSCAPE = 0.58;
+const MAP_MIN_H = 130;
 const mapView = { zoom: 1, panX: 0, panY: 0, viewW: MAP_LW, viewH: MAP_LH, dpr: 1, small: false, needCenter: false, needFit: false };
 
 function mapMinZoom() { return Math.min(mapView.viewW / MAP_LW, mapView.viewH / MAP_LH); }
@@ -11494,10 +11497,10 @@ function layoutMapModal() {
         mapView.dpr = Math.min(window.devicePixelRatio || 1, 2);
 		if (window.innerHeight >= window.innerWidth) {
 			mapView.viewW = Math.max(200, Math.min(MAP_LW, window.innerWidth - 24));
-			mapView.viewH = Math.max(150, Math.min(MAP_LH, Math.round(window.innerHeight * 0.45)));
+			mapView.viewH = Math.max(MAP_MIN_H, Math.min(MAP_LH, Math.round(window.innerHeight * MAP_H_RATIO_PORTRAIT)));
 		} else {
-			mapView.viewH = Math.max(150, Math.min(MAP_LH, window.innerHeight - 110));
-			mapView.viewW = Math.max(200, Math.min(MAP_LW, window.innerWidth - 24, Math.round(mapView.viewH * 1.8)));
+			mapView.viewH = Math.max(MAP_MIN_H, Math.min(MAP_LH, Math.round(window.innerHeight * MAP_H_RATIO_LANDSCAPE)));
+			mapView.viewW = Math.max(200, Math.min(MAP_LW, window.innerWidth - 24, Math.round(mapView.viewH * 2.2)));
 		}
 		if (mapModalElements.titleLabel) {
 			mapModalElements.titleLabel.style.fontSize = "14px";
