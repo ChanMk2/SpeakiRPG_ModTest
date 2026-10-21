@@ -11506,6 +11506,7 @@ function layoutMapModal() {
 		if (mapModalElements.fitBtn) mapModalElements.fitBtn.style.display = "";
 		if (mapModalElements.btnRow) mapModalElements.btnRow.style.marginTop = "12px";
 		if (mapModalElements.closeBtn) { mapModalElements.closeBtn.style.padding = "8px 20px"; mapModalElements.closeBtn.style.minHeight = "40px"; }
+		m.style.setProperty("--spkmod-scale", "1");
 		mapView.dpr = Math.min(window.devicePixelRatio || 1, 2);
 		if (window.innerHeight >= window.innerWidth) {
 			// Portrait: full width, canvas height = MAP_H_RATIO_PORTRAIT of the screen height.
