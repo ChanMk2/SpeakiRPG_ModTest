@@ -11506,6 +11506,8 @@ function layoutMapModal() {
 		if (mapModalElements.fitBtn) mapModalElements.fitBtn.style.display = "";
 		if (mapModalElements.btnRow) mapModalElements.btnRow.style.marginTop = "12px";
 		if (mapModalElements.closeBtn) { mapModalElements.closeBtn.style.padding = "8px 20px"; mapModalElements.closeBtn.style.minHeight = "40px"; }
+		// Do NOT add #spkmod-map-modal to the --spkmod-scale transform rule in updateDynamicStyles(), because this window sizes itself
+		// in layoutMapModal(); pin --spkmod-scale to 1 here so makeDraggable doesn't divide the drag distance by the mobile UI scale (0.55)
 		m.style.setProperty("--spkmod-scale", "1");
 		mapView.dpr = Math.min(window.devicePixelRatio || 1, 2);
 		if (window.innerHeight >= window.innerWidth) {
