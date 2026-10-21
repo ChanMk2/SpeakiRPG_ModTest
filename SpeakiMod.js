@@ -1,3 +1,17 @@
+// Suppress report-only CSP warnings in console for custom emoji assets
+try {
+	const _spkOrigWarn = console.warn;
+	console.warn = function(...args) {
+		if (typeof args[0] === 'string' && (args[0].includes('violates the following Content Security Policy directive') || args[0].includes('Content Security Policy'))) return;
+		return _spkOrigWarn.apply(this, args);
+	};
+	const _spkOrigError = console.error;
+	console.error = function(...args) {
+		if (typeof args[0] === 'string' && (args[0].includes('violates the following Content Security Policy directive') || args[0].includes('Content Security Policy'))) return;
+		return _spkOrigError.apply(this, args);
+	};
+} catch (_) {}
+
 /*
  * SpeakiMod (speakimod.js)
  * Copyright (c) Alluseri (https://github.com/Alluseri/SpeakiMod)
@@ -182,6 +196,15 @@ if (!window.i18n) {
 }
 
 function getAuthToken() {
+	if (typeof window.getNativeAuthToken === "function") {
+		try {
+			const nativeToken = window.getNativeAuthToken();
+			if (nativeToken) {
+				window.speakiAuthToken = nativeToken;
+				return nativeToken;
+			}
+		} catch (_) {}
+	}
 	if (window.speakiAuthToken) return window.speakiAuthToken;
 
 	const socketUrl = (typeof gameState !== 'undefined' && (gameState?.socket?.socket?.url || gameState?.socket?.url)) || "";
@@ -209,6 +232,11 @@ function getAuthToken() {
 			}
 		}
 	}
+	if (typeof lunSpkAuthToken === "string" && lunSpkAuthToken) {
+		let t = lunSpkAuthToken;
+		if (t.toLowerCase().startsWith("bearer ")) t = t.substring(7).trim();
+		if (t) return t;
+	}
 	return "";
 }
 const Emotes = {
@@ -235,622 +263,638 @@ var lunCurrentSpeedMps = 0;
 
 // Default fallback portals and raids (offline / boot fallback)
 const DEFAULT_PORTALS = {
-	"1": {
-		"2": {
-			"portalId": 1,
-			"requiredQuestCode": null,
-			"pos": {
-				"x": 95,
-				"z": 50
-			}
-		}
-	},
-	"2": {
-		"1": {
-			"portalId": 2,
-			"requiredQuestCode": null,
-			"pos": {
-				"x": 105,
-				"z": 50
-			}
-		},
-		"3": {
-			"portalId": 7,
-			"requiredQuestCode": null,
-			"pos": {
-				"x": 196,
-				"z": 100
-			}
-		},
-		"101": {
-			"portalId": 19,
-			"requiredQuestCode": "MQ_BOSS_WORLDTREE",
-			"pos": {
-				"x": 150,
-				"z": 195
-			}
-		},
-		"201": {
-			"portalId": 37,
-			"requiredQuestCode": "MQ2_CORE3",
-			"pos": {
-				"x": 150,
-				"z": 5
-			}
-		}
-	},
-	"3": {
-		"2": {
-			"portalId": 8,
-			"requiredQuestCode": null,
-			"pos": {
-				"x": 204,
-				"z": 100
-			}
-		},
-		"4": {
-			"portalId": 3,
-			"requiredQuestCode": null,
-			"pos": {
-				"x": 296,
-				"z": 120
-			}
-		}
-	},
-	"4": {
-		"3": {
-			"portalId": 4,
-			"requiredQuestCode": null,
-			"pos": {
-				"x": 306,
-				"z": 120
-			}
-		},
-		"5": {
-			"portalId": 9,
-			"requiredQuestCode": null,
-			"pos": {
-				"x": 426,
-				"z": 100
-			}
-		}
-	},
-	"5": {
-		"4": {
-			"portalId": 10,
-			"requiredQuestCode": null,
-			"pos": {
-				"x": 434,
-				"z": 100
-			}
-		},
-		"6": {
-			"portalId": 5,
-			"requiredQuestCode": null,
-			"pos": {
-				"x": 554,
-				"z": 100
-			}
-		}
-	},
-	"6": {
-		"5": {
-			"portalId": 6,
-			"requiredQuestCode": null,
-			"pos": {
-				"x": 580,
-				"z": 100
-			}
-		},
-		"7": {
-			"portalId": 11,
-			"requiredQuestCode": null,
-			"pos": {
-				"x": 656,
-				"z": 100
-			}
-		}
-	},
-	"7": {
-		"6": {
-			"portalId": 12,
-			"requiredQuestCode": null,
-			"pos": {
-				"x": 664,
-				"z": 100
-			}
-		},
-		"8": {
-			"portalId": 13,
-			"requiredQuestCode": null,
-			"pos": {
-				"x": 756,
-				"z": 100
-			}
-		}
-	},
-	"8": {
-		"7": {
-			"portalId": 14,
-			"requiredQuestCode": null,
-			"pos": {
-				"x": 764,
-				"z": 100
-			}
-		},
-		"9": {
-			"portalId": 15,
-			"requiredQuestCode": null,
-			"pos": {
-				"x": 956,
-				"z": 100
-			}
-		}
-	},
-	"9": {
-		"8": {
-			"portalId": 16,
-			"requiredQuestCode": null,
-			"pos": {
-				"x": 964,
-				"z": 100
-			}
-		},
-		"10": {
-			"portalId": 17,
-			"requiredQuestCode": null,
-			"pos": {
-				"x": 1136,
-				"z": 100
-			}
-		}
-	},
-	"10": {
-		"9": {
-			"portalId": 18,
-			"requiredQuestCode": null,
-			"pos": {
-				"x": 1144,
-				"z": 100
-			}
-		}
-	},
-	"101": {
-		"2": {
-			"portalId": 20,
-			"requiredQuestCode": null,
-			"pos": {
-				"x": 150,
-				"z": 205
-			}
-		},
-		"102": {
-			"portalId": 21,
-			"requiredQuestCode": null,
-			"pos": {
-				"x": 295,
-				"z": 300
-			}
-		}
-	},
-	"102": {
-		"101": {
-			"portalId": 22,
-			"requiredQuestCode": null,
-			"pos": {
-				"x": 352.5,
-				"z": 300
-			}
-		},
-		"103": {
-			"portalId": 23,
-			"requiredQuestCode": null,
-			"pos": {
-				"x": 447.5,
-				"z": 300
-			}
-		}
-	},
-	"103": {
-		"102": {
-			"portalId": 24,
-			"requiredQuestCode": null,
-			"pos": {
-				"x": 552.5,
-				"z": 300
-			}
-		},
-		"104": {
-			"portalId": 25,
-			"requiredQuestCode": null,
-			"pos": {
-				"x": 647.5,
-				"z": 250
-			}
-		}
-	},
-	"104": {
-		"103": {
-			"portalId": 26,
-			"requiredQuestCode": "MQ_BOSS_WORLDTREE",
-			"pos": {
-				"x": 716.25,
-				"z": 250
-			}
-		},
-		"105": {
-			"portalId": 27,
-			"requiredQuestCode": "MQ_BOSS_WORLDTREE",
-			"pos": {
-				"x": 783.75,
-				"z": 250
-			}
-		}
-	},
-	"105": {
-		"104": {
-			"portalId": 28,
-			"requiredQuestCode": null,
-			"pos": {
-				"x": 852.5,
-				"z": 250
-			}
-		},
-		"106": {
-			"portalId": 29,
-			"requiredQuestCode": null,
-			"pos": {
-				"x": 947.5,
-				"z": 300
-			}
-		}
-	},
-	"106": {
-		"105": {
-			"portalId": 30,
-			"requiredQuestCode": null,
-			"pos": {
-				"x": 1052.5,
-				"z": 300
-			}
-		},
-		"107": {
-			"portalId": 31,
-			"requiredQuestCode": null,
-			"pos": {
-				"x": 1147.5,
-				"z": 300
-			}
-		}
-	},
-	"107": {
-		"106": {
-			"portalId": 32,
-			"requiredQuestCode": null,
-			"pos": {
-				"x": 1252.5,
-				"z": 300
-			}
-		},
-		"108": {
-			"portalId": 33,
-			"requiredQuestCode": null,
-			"pos": {
-				"x": 1347.5,
-				"z": 300
-			}
-		}
-	},
-	"108": {
-		"107": {
-			"portalId": 34,
-			"requiredQuestCode": null,
-			"pos": {
-				"x": 1405,
-				"z": 300
-			}
-		}
-	},
-	"201": {
-		"2": {
-			"portalId": 38,
-			"requiredQuestCode": null,
-			"pos": {
-				"x": 180,
-				"z": -5
-			}
-		},
-		"202": {
-			"portalId": 39,
-			"requiredQuestCode": null,
-			"pos": {
-				"x": 180,
-				"z": -155
-			}
-		}
-	},
-	"202": {
-		"201": {
-			"portalId": 40,
-			"requiredQuestCode": null,
-			"pos": {
-				"x": 345,
-				"z": -100
-			}
-		},
-		"203": {
-			"portalId": 41,
-			"requiredQuestCode": null,
-			"pos": {
-				"x": 455,
-				"z": -100
-			}
-		}
-	},
-	"203": {
-		"202": {
-			"portalId": 42,
-			"requiredQuestCode": null,
-			"pos": {
-				"x": 525,
-				"z": -60
-			}
-		},
-		"204": {
-			"portalId": 43,
-			"requiredQuestCode": null,
-			"pos": {
-				"x": 675,
-				"z": -60
-			}
-		}
-	},
-	"204": {
-		"203": {
-			"portalId": 44,
-			"requiredQuestCode": "MQ2_CORE3",
-			"pos": {
-				"x": 730,
-				"z": -50
-			}
-		},
-		"205": {
-			"portalId": 45,
-			"requiredQuestCode": "MQ2_CORE3",
-			"pos": {
-				"x": 770,
-				"z": -50
-			}
-		}
-	},
-	"205": {
-		"204": {
-			"portalId": 46,
-			"requiredQuestCode": null,
-			"pos": {
-				"x": 845,
-				"z": -100
-			}
-		},
-		"206": {
-			"portalId": 47,
-			"requiredQuestCode": null,
-			"pos": {
-				"x": 955,
-				"z": -100
-			}
-		}
-	},
-	"206": {
-		"205": {
-			"portalId": 48,
-			"requiredQuestCode": null,
-			"pos": {
-				"x": 1045,
-				"z": -100
-			}
-		},
-		"207": {
-			"portalId": 49,
-			"requiredQuestCode": null,
-			"pos": {
-				"x": 1155,
-				"z": -100
-			}
-		}
-	},
-	"207": {
-		"206": {
-			"portalId": 50,
-			"requiredQuestCode": null,
-			"pos": {
-				"x": 1245,
-				"z": -100
-			}
-		},
-		"208": {
-			"portalId": 51,
-			"requiredQuestCode": null,
-			"pos": {
-				"x": 1355,
-				"z": -100
-			}
-		}
-	},
-	"208": {
-		"207": {
-			"portalId": 52,
-			"requiredQuestCode": null,
-			"pos": {
-				"x": 1445,
-				"z": -100
-			}
-		},
-		"209": {
-			"portalId": 53,
-			"requiredQuestCode": null,
-			"pos": {
-				"x": 1555,
-				"z": -100
-			}
-		}
-	},
-	"209": {
-		"208": {
-			"portalId": 54,
-			"requiredQuestCode": null,
-			"pos": {
-				"x": 1625,
-				"z": -60
-			}
-		}
-	},
-	"301": {
-		"302": {
-			"portalId": 55,
-			"requiredQuestCode": null,
-			"pos": {
-				"x": 174,
-				"z": -830
-			}
-		}
-	},
-	"302": {
-		"301": {
-			"portalId": 56,
-			"requiredQuestCode": null,
-			"pos": {
-				"x": 226,
-				"z": -830
-			}
-		},
-		"303": {
-			"portalId": 57,
-			"requiredQuestCode": null,
-			"pos": {
-				"x": 354,
-				"z": -850
-			}
-		}
-	},
-	"303": {
-		"302": {
-			"portalId": 58,
-			"requiredQuestCode": null,
-			"pos": {
-				"x": 406,
-				"z": -850
-			}
-		},
-		"304": {
-			"portalId": 59,
-			"requiredQuestCode": null,
-			"pos": {
-				"x": 574,
-				"z": -820
-			}
-		}
-	},
-	"304": {
-		"303": {
-			"portalId": 60,
-			"requiredQuestCode": null,
-			"pos": {
-				"x": 626,
-				"z": -820
-			}
-		},
-		"305": {
-			"portalId": 61,
-			"requiredQuestCode": null,
-			"pos": {
-				"x": 684,
-				"z": -820
-			}
-		}
-	},
-	"305": {
-		"304": {
-			"portalId": 62,
-			"requiredQuestCode": null,
-			"pos": {
-				"x": 736,
-				"z": -820
-			}
-		},
-		"306": {
-			"portalId": 63,
-			"requiredQuestCode": null,
-			"pos": {
-				"x": 884,
-				"z": -850
-			}
-		}
-	},
-	"306": {
-		"305": {
-			"portalId": 64,
-			"requiredQuestCode": null,
-			"pos": {
-				"x": 936,
-				"z": -850
-			}
-		},
-		"307": {
-			"portalId": 65,
-			"requiredQuestCode": null,
-			"pos": {
-				"x": 1104,
-				"z": -850
-			}
-		}
-	},
-	"307": {
-		"306": {
-			"portalId": 66,
-			"requiredQuestCode": null,
-			"pos": {
-				"x": 1156,
-				"z": -850
-			}
-		},
-		"308": {
-			"portalId": 67,
-			"requiredQuestCode": null,
-			"pos": {
-				"x": 1304,
-				"z": -860
-			}
-		}
-	},
-	"308": {
-		"307": {
-			"portalId": 68,
-			"requiredQuestCode": null,
-			"pos": {
-				"x": 1356,
-				"z": -860
-			}
-		},
-		"309": {
-			"portalId": 69,
-			"requiredQuestCode": null,
-			"pos": {
-				"x": 1484,
-				"z": -860
-			}
-		}
-	},
-	"309": {
-		"308": {
-			"portalId": 70,
-			"requiredQuestCode": null,
-			"pos": {
-				"x": 1536,
-				"z": -860
-			}
-		}
-	}
+ "1": {
+  "2": {
+   "portalId": 1,
+   "requiredQuestCode": null,
+   "pos": {
+    "x": 95,
+    "z": 50
+   }
+  }
+ },
+ "2": {
+  "1": {
+   "portalId": 2,
+   "requiredQuestCode": null,
+   "pos": {
+    "x": 105,
+    "z": 50
+   }
+  },
+  "3": {
+   "portalId": 7,
+   "requiredQuestCode": null,
+   "pos": {
+    "x": 196,
+    "z": 100
+   }
+  },
+  "101": {
+   "portalId": 19,
+   "requiredQuestCode": "MQ_BOSS_WORLDTREE",
+   "pos": {
+    "x": 150,
+    "z": 195
+   }
+  },
+  "201": {
+   "portalId": 37,
+   "requiredQuestCode": "MQ2_CORE3",
+   "pos": {
+    "x": 150,
+    "z": 5
+   }
+  },
+  "301": {
+   "portalId": 71,
+   "requiredQuestCode": "MQ3_THUNDER3",
+   "pos": {
+    "x": 190,
+    "z": 5
+   }
+  }
+ },
+ "3": {
+  "4": {
+   "portalId": 3,
+   "requiredQuestCode": null,
+   "pos": {
+    "x": 296,
+    "z": 120
+   }
+  },
+  "2": {
+   "portalId": 8,
+   "requiredQuestCode": null,
+   "pos": {
+    "x": 204,
+    "z": 100
+   }
+  }
+ },
+ "4": {
+  "3": {
+   "portalId": 4,
+   "requiredQuestCode": null,
+   "pos": {
+    "x": 306,
+    "z": 120
+   }
+  },
+  "5": {
+   "portalId": 9,
+   "requiredQuestCode": null,
+   "pos": {
+    "x": 426,
+    "z": 100
+   }
+  }
+ },
+ "5": {
+  "6": {
+   "portalId": 5,
+   "requiredQuestCode": null,
+   "pos": {
+    "x": 554,
+    "z": 100
+   }
+  },
+  "4": {
+   "portalId": 10,
+   "requiredQuestCode": null,
+   "pos": {
+    "x": 434,
+    "z": 100
+   }
+  }
+ },
+ "6": {
+  "5": {
+   "portalId": 6,
+   "requiredQuestCode": null,
+   "pos": {
+    "x": 580,
+    "z": 100
+   }
+  },
+  "7": {
+   "portalId": 11,
+   "requiredQuestCode": null,
+   "pos": {
+    "x": 656,
+    "z": 100
+   }
+  }
+ },
+ "7": {
+  "6": {
+   "portalId": 12,
+   "requiredQuestCode": null,
+   "pos": {
+    "x": 664,
+    "z": 100
+   }
+  },
+  "8": {
+   "portalId": 13,
+   "requiredQuestCode": null,
+   "pos": {
+    "x": 756,
+    "z": 100
+   }
+  }
+ },
+ "8": {
+  "7": {
+   "portalId": 14,
+   "requiredQuestCode": null,
+   "pos": {
+    "x": 764,
+    "z": 100
+   }
+  },
+  "9": {
+   "portalId": 15,
+   "requiredQuestCode": null,
+   "pos": {
+    "x": 956,
+    "z": 100
+   }
+  }
+ },
+ "9": {
+  "8": {
+   "portalId": 16,
+   "requiredQuestCode": null,
+   "pos": {
+    "x": 964,
+    "z": 100
+   }
+  },
+  "10": {
+   "portalId": 17,
+   "requiredQuestCode": null,
+   "pos": {
+    "x": 1136,
+    "z": 100
+   }
+  }
+ },
+ "10": {
+  "9": {
+   "portalId": 18,
+   "requiredQuestCode": null,
+   "pos": {
+    "x": 1144,
+    "z": 100
+   }
+  }
+ },
+ "101": {
+  "2": {
+   "portalId": 20,
+   "requiredQuestCode": null,
+   "pos": {
+    "x": 150,
+    "z": 205
+   }
+  },
+  "102": {
+   "portalId": 21,
+   "requiredQuestCode": null,
+   "pos": {
+    "x": 295,
+    "z": 300
+   }
+  }
+ },
+ "102": {
+  "101": {
+   "portalId": 22,
+   "requiredQuestCode": null,
+   "pos": {
+    "x": 352.5,
+    "z": 300
+   }
+  },
+  "103": {
+   "portalId": 23,
+   "requiredQuestCode": null,
+   "pos": {
+    "x": 447.5,
+    "z": 300
+   }
+  }
+ },
+ "103": {
+  "102": {
+   "portalId": 24,
+   "requiredQuestCode": null,
+   "pos": {
+    "x": 552.5,
+    "z": 300
+   }
+  },
+  "104": {
+   "portalId": 25,
+   "requiredQuestCode": null,
+   "pos": {
+    "x": 647.5,
+    "z": 250
+   }
+  }
+ },
+ "104": {
+  "103": {
+   "portalId": 26,
+   "requiredQuestCode": "MQ_BOSS_WORLDTREE",
+   "pos": {
+    "x": 716.25,
+    "z": 250
+   }
+  },
+  "105": {
+   "portalId": 27,
+   "requiredQuestCode": "MQ_BOSS_WORLDTREE",
+   "pos": {
+    "x": 783.75,
+    "z": 250
+   }
+  }
+ },
+ "105": {
+  "104": {
+   "portalId": 28,
+   "requiredQuestCode": null,
+   "pos": {
+    "x": 852.5,
+    "z": 250
+   }
+  },
+  "106": {
+   "portalId": 29,
+   "requiredQuestCode": null,
+   "pos": {
+    "x": 947.5,
+    "z": 300
+   }
+  }
+ },
+ "106": {
+  "105": {
+   "portalId": 30,
+   "requiredQuestCode": null,
+   "pos": {
+    "x": 1052.5,
+    "z": 300
+   }
+  },
+  "107": {
+   "portalId": 31,
+   "requiredQuestCode": null,
+   "pos": {
+    "x": 1147.5,
+    "z": 300
+   }
+  }
+ },
+ "107": {
+  "106": {
+   "portalId": 32,
+   "requiredQuestCode": null,
+   "pos": {
+    "x": 1252.5,
+    "z": 300
+   }
+  },
+  "108": {
+   "portalId": 33,
+   "requiredQuestCode": null,
+   "pos": {
+    "x": 1347.5,
+    "z": 300
+   }
+  }
+ },
+ "108": {
+  "107": {
+   "portalId": 34,
+   "requiredQuestCode": null,
+   "pos": {
+    "x": 1405,
+    "z": 300
+   }
+  }
+ },
+ "201": {
+  "2": {
+   "portalId": 38,
+   "requiredQuestCode": null,
+   "pos": {
+    "x": 180,
+    "z": -5
+   }
+  },
+  "202": {
+   "portalId": 39,
+   "requiredQuestCode": null,
+   "pos": {
+    "x": 180,
+    "z": -155
+   }
+  }
+ },
+ "202": {
+  "201": {
+   "portalId": 40,
+   "requiredQuestCode": null,
+   "pos": {
+    "x": 345,
+    "z": -100
+   }
+  },
+  "203": {
+   "portalId": 41,
+   "requiredQuestCode": null,
+   "pos": {
+    "x": 455,
+    "z": -100
+   }
+  }
+ },
+ "203": {
+  "202": {
+   "portalId": 42,
+   "requiredQuestCode": null,
+   "pos": {
+    "x": 525,
+    "z": -60
+   }
+  },
+  "204": {
+   "portalId": 43,
+   "requiredQuestCode": null,
+   "pos": {
+    "x": 675,
+    "z": -60
+   }
+  }
+ },
+ "204": {
+  "203": {
+   "portalId": 44,
+   "requiredQuestCode": "MQ2_CORE3",
+   "pos": {
+    "x": 730,
+    "z": -50
+   }
+  },
+  "205": {
+   "portalId": 45,
+   "requiredQuestCode": "MQ2_CORE3",
+   "pos": {
+    "x": 770,
+    "z": -50
+   }
+  }
+ },
+ "205": {
+  "204": {
+   "portalId": 46,
+   "requiredQuestCode": null,
+   "pos": {
+    "x": 845,
+    "z": -100
+   }
+  },
+  "206": {
+   "portalId": 47,
+   "requiredQuestCode": null,
+   "pos": {
+    "x": 955,
+    "z": -100
+   }
+  }
+ },
+ "206": {
+  "205": {
+   "portalId": 48,
+   "requiredQuestCode": null,
+   "pos": {
+    "x": 1045,
+    "z": -100
+   }
+  },
+  "207": {
+   "portalId": 49,
+   "requiredQuestCode": null,
+   "pos": {
+    "x": 1155,
+    "z": -100
+   }
+  }
+ },
+ "207": {
+  "206": {
+   "portalId": 50,
+   "requiredQuestCode": null,
+   "pos": {
+    "x": 1245,
+    "z": -100
+   }
+  },
+  "208": {
+   "portalId": 51,
+   "requiredQuestCode": null,
+   "pos": {
+    "x": 1355,
+    "z": -100
+   }
+  }
+ },
+ "208": {
+  "207": {
+   "portalId": 52,
+   "requiredQuestCode": null,
+   "pos": {
+    "x": 1445,
+    "z": -100
+   }
+  },
+  "209": {
+   "portalId": 53,
+   "requiredQuestCode": null,
+   "pos": {
+    "x": 1555,
+    "z": -100
+   }
+  }
+ },
+ "209": {
+  "208": {
+   "portalId": 54,
+   "requiredQuestCode": null,
+   "pos": {
+    "x": 1625,
+    "z": -60
+   }
+  }
+ },
+ "301": {
+  "302": {
+   "portalId": 55,
+   "requiredQuestCode": null,
+   "pos": {
+    "x": 134,
+    "z": -830
+   }
+  },
+  "2": {
+   "portalId": 72,
+   "requiredQuestCode": null,
+   "pos": {
+    "x": 8,
+    "z": -834
+   }
+  }
+ },
+ "302": {
+  "301": {
+   "portalId": 56,
+   "requiredQuestCode": null,
+   "pos": {
+    "x": 226,
+    "z": -830
+   }
+  },
+  "303": {
+   "portalId": 57,
+   "requiredQuestCode": null,
+   "pos": {
+    "x": 314,
+    "z": -850
+   }
+  }
+ },
+ "303": {
+  "302": {
+   "portalId": 58,
+   "requiredQuestCode": null,
+   "pos": {
+    "x": 406,
+    "z": -850
+   }
+  },
+  "304": {
+   "portalId": 59,
+   "requiredQuestCode": null,
+   "pos": {
+    "x": 544,
+    "z": -820
+   }
+  }
+ },
+ "304": {
+  "303": {
+   "portalId": 60,
+   "requiredQuestCode": null,
+   "pos": {
+    "x": 626,
+    "z": -820
+   }
+  },
+  "305": {
+   "portalId": 61,
+   "requiredQuestCode": null,
+   "pos": {
+    "x": 684,
+    "z": -820
+   }
+  }
+ },
+ "305": {
+  "304": {
+   "portalId": 62,
+   "requiredQuestCode": null,
+   "pos": {
+    "x": 736,
+    "z": -820
+   }
+  },
+  "306": {
+   "portalId": 63,
+   "requiredQuestCode": null,
+   "pos": {
+    "x": 884,
+    "z": -850
+   }
+  }
+ },
+ "306": {
+  "305": {
+   "portalId": 64,
+   "requiredQuestCode": null,
+   "pos": {
+    "x": 936,
+    "z": -850
+   }
+  },
+  "307": {
+   "portalId": 65,
+   "requiredQuestCode": null,
+   "pos": {
+    "x": 1064,
+    "z": -850
+   }
+  }
+ },
+ "307": {
+  "306": {
+   "portalId": 66,
+   "requiredQuestCode": null,
+   "pos": {
+    "x": 1156,
+    "z": -850
+   }
+  },
+  "308": {
+   "portalId": 67,
+   "requiredQuestCode": null,
+   "pos": {
+    "x": 1304,
+    "z": -860
+   }
+  }
+ },
+ "308": {
+  "307": {
+   "portalId": 68,
+   "requiredQuestCode": null,
+   "pos": {
+    "x": 1356,
+    "z": -860
+   }
+  },
+  "309": {
+   "portalId": 69,
+   "requiredQuestCode": null,
+   "pos": {
+    "x": 1474,
+    "z": -860
+   }
+  }
+ },
+ "309": {
+  "308": {
+   "portalId": 70,
+   "requiredQuestCode": null,
+   "pos": {
+    "x": 1556,
+    "z": -860
+   }
+  }
+ }
 };
 
 const DEFAULT_RAIDS = [
@@ -930,8 +974,21 @@ const DEFAULT_RAIDS = [
 		"bossLevel": 75,
 		"requiredLevel": 75,
 		"name": "Earthshaker Sealed Altar"
+	},
+	{
+		"raidId": 10,
+		"templateZoneId": 910,
+		"altarZoneId": 306,
+		"altarX": 1018,
+		"altarZ": -806,
+		"bossMonsterId": 1385,
+		"bossLevel": 94,
+		"requiredLevel": 85,
+		"name": "Theater Backstage (Soggy Stage Curtain)"
 	}
 ];
+
+const DEFAULT_WORLD_ZONES = [{"zoneId": 1, "minX": 0, "maxX": 100, "minZ": 0, "maxZ": 100, "requiredQuestCode": null}, {"zoneId": 2, "minX": 100, "maxX": 200, "minZ": 0, "maxZ": 200, "requiredQuestCode": null}, {"zoneId": 3, "minX": 200, "maxX": 300, "minZ": 0, "maxZ": 200, "requiredQuestCode": null}, {"zoneId": 4, "minX": 300, "maxX": 430, "minZ": 60, "maxZ": 140, "requiredQuestCode": null}, {"zoneId": 5, "minX": 430, "maxX": 560, "minZ": 60, "maxZ": 140, "requiredQuestCode": null}, {"zoneId": 6, "minX": 560, "maxX": 660, "minZ": 0, "maxZ": 200, "requiredQuestCode": null}, {"zoneId": 7, "minX": 660, "maxX": 760, "minZ": 0, "maxZ": 200, "requiredQuestCode": null}, {"zoneId": 8, "minX": 760, "maxX": 960, "minZ": 0, "maxZ": 200, "requiredQuestCode": null}, {"zoneId": 9, "minX": 960, "maxX": 1140, "minZ": 40, "maxZ": 160, "requiredQuestCode": null}, {"zoneId": 10, "minX": 1140, "maxX": 1360, "minZ": 0, "maxZ": 200, "requiredQuestCode": null}, {"zoneId": 11, "minX": 2000, "maxX": 2040, "minZ": 0, "maxZ": 40, "requiredQuestCode": null}, {"zoneId": 12, "minX": 2100, "maxX": 2140, "minZ": 0, "maxZ": 40, "requiredQuestCode": null}, {"zoneId": 13, "minX": 2200, "maxX": 2240, "minZ": 0, "maxZ": 40, "requiredQuestCode": null}, {"zoneId": 101, "minX": 100, "maxX": 300, "minZ": 200, "maxZ": 400, "requiredQuestCode": null}, {"zoneId": 102, "minX": 350, "maxX": 450, "minZ": 200, "maxZ": 400, "requiredQuestCode": null}, {"zoneId": 103, "minX": 550, "maxX": 650, "minZ": 200, "maxZ": 400, "requiredQuestCode": null}, {"zoneId": 104, "minX": 712.5, "maxX": 787.5, "minZ": 212.5, "maxZ": 287.5, "requiredQuestCode": "MQ_BOSS_WORLDTREE"}, {"zoneId": 105, "minX": 850, "maxX": 950, "minZ": 200, "maxZ": 400, "requiredQuestCode": null}, {"zoneId": 106, "minX": 1050, "maxX": 1150, "minZ": 200, "maxZ": 400, "requiredQuestCode": null}, {"zoneId": 107, "minX": 1250, "maxX": 1350, "minZ": 200, "maxZ": 400, "requiredQuestCode": null}, {"zoneId": 108, "minX": 1400, "maxX": 1600, "minZ": 200, "maxZ": 400, "requiredQuestCode": null}, {"zoneId": 181, "minX": 2300, "maxX": 2340, "minZ": 0, "maxZ": 40, "requiredQuestCode": null}, {"zoneId": 182, "minX": 2400, "maxX": 2440, "minZ": 0, "maxZ": 40, "requiredQuestCode": null}, {"zoneId": 201, "minX": 120, "maxX": 280, "minZ": -160, "maxZ": 0, "requiredQuestCode": null}, {"zoneId": 202, "minX": 340, "maxX": 460, "minZ": -200, "maxZ": 0, "requiredQuestCode": null}, {"zoneId": 203, "minX": 520, "maxX": 680, "minZ": -160, "maxZ": 0, "requiredQuestCode": null}, {"zoneId": 204, "minX": 725, "maxX": 775, "minZ": -75, "maxZ": -25, "requiredQuestCode": "MQ2_CORE3"}, {"zoneId": 205, "minX": 840, "maxX": 960, "minZ": -200, "maxZ": 0, "requiredQuestCode": null}, {"zoneId": 206, "minX": 1040, "maxX": 1160, "minZ": -200, "maxZ": 0, "requiredQuestCode": null}, {"zoneId": 207, "minX": 1240, "maxX": 1360, "minZ": -200, "maxZ": 0, "requiredQuestCode": null}, {"zoneId": 208, "minX": 1440, "maxX": 1560, "minZ": -200, "maxZ": 0, "requiredQuestCode": null}, {"zoneId": 209, "minX": 1620, "maxX": 1780, "minZ": -160, "maxZ": 0, "requiredQuestCode": null}, {"zoneId": 281, "minX": 2500, "maxX": 2540, "minZ": 0, "maxZ": 40, "requiredQuestCode": null}, {"zoneId": 282, "minX": 2588, "maxX": 2652, "minZ": -12, "maxZ": 52, "requiredQuestCode": null}, {"zoneId": 900, "minX": 0, "maxX": 1200, "minZ": 0, "maxZ": 25, "requiredQuestCode": null}, {"zoneId": 901, "minX": 0, "maxX": 100, "minZ": 0, "maxZ": 100, "requiredQuestCode": null}, {"zoneId": 902, "minX": 0, "maxX": 50, "minZ": 0, "maxZ": 100, "requiredQuestCode": null}, {"zoneId": 903, "minX": 0, "maxX": 120, "minZ": 0, "maxZ": 90, "requiredQuestCode": null}, {"zoneId": 905, "minX": 0, "maxX": 40, "minZ": 0, "maxZ": 40, "requiredQuestCode": null}, {"zoneId": 910, "minX": 2700, "maxX": 2740, "minZ": 0, "maxZ": 30, "requiredQuestCode": null}, {"zoneId": 301, "minX": 0, "maxX": 140, "minZ": -900, "maxZ": -760, "requiredQuestCode": null}, {"zoneId": 302, "minX": 220, "maxX": 320, "minZ": -940, "maxZ": -780, "requiredQuestCode": null}, {"zoneId": 303, "minX": 400, "maxX": 550, "minZ": -900, "maxZ": -780, "requiredQuestCode": null}, {"zoneId": 304, "minX": 620, "maxX": 690, "minZ": -855, "maxZ": -785, "requiredQuestCode": "MQ3_THUNDER3"}, {"zoneId": 305, "minX": 730, "maxX": 890, "minZ": -940, "maxZ": -780, "requiredQuestCode": null}, {"zoneId": 306, "minX": 930, "maxX": 1070, "minZ": -910, "maxZ": -780, "requiredQuestCode": null}, {"zoneId": 307, "minX": 1150, "maxX": 1310, "minZ": -900, "maxZ": -800, "requiredQuestCode": null}, {"zoneId": 308, "minX": 1350, "maxX": 1480, "minZ": -950, "maxZ": -800, "requiredQuestCode": null}, {"zoneId": 309, "minX": 1550, "maxX": 1710, "minZ": -940, "maxZ": -780, "requiredQuestCode": null}, {"zoneId": 909, "minX": 1.4, "maxX": 22.6, "minZ": 1.4, "maxZ": 12.6, "requiredQuestCode": null}, {"zoneId": 950, "minX": 3000, "maxX": 3100, "minZ": 0, "maxZ": 100, "requiredQuestCode": null}];
 
 var spkmodConstants = (function() {
 	try {
@@ -940,12 +997,14 @@ var spkmodConstants = (function() {
 			if (cached) return JSON.parse(cached);
 		}
 	} catch (_) {}
-	return { portals: DEFAULT_PORTALS, raids: DEFAULT_RAIDS };
+	return { portals: DEFAULT_PORTALS, raids: DEFAULT_RAIDS, zones: DEFAULT_WORLD_ZONES };
 })();
 
 var Portals = spkmodConstants.portals || DEFAULT_PORTALS;
 window.Portals = Portals;
 window.spkmodRaids = spkmodConstants.raids || DEFAULT_RAIDS;
+var WorldZones = spkmodConstants.zones || DEFAULT_WORLD_ZONES;
+window.WorldZones = WorldZones;
 
 (async function() {
 	try {
@@ -959,6 +1018,14 @@ window.spkmodRaids = spkmodConstants.raids || DEFAULT_RAIDS;
 				}
 				if (data.raids) {
 					window.spkmodRaids = data.raids;
+				}
+				if (data.zones && Array.isArray(data.zones)) {
+					WorldZones = data.zones;
+					window.WorldZones = WorldZones;
+				}
+				if (data.zones && Array.isArray(data.zones)) {
+					WorldZones = data.zones;
+					window.WorldZones = WorldZones;
 				}
 				if (typeof window !== "undefined" && window.localStorage) {
 					try {
@@ -1011,7 +1078,6 @@ XMLHttpRequest.prototype.open = function(method, url) {
 	});
 	origXhrOpen.apply(this, arguments);
 };
-const WorldZones = [{"zoneId": 1, "minX": 0, "maxX": 100, "minZ": 0, "maxZ": 100, "requiredQuestCode": null}, {"zoneId": 2, "minX": 100, "maxX": 200, "minZ": 0, "maxZ": 200, "requiredQuestCode": null}, {"zoneId": 3, "minX": 200, "maxX": 300, "minZ": 0, "maxZ": 200, "requiredQuestCode": null}, {"zoneId": 4, "minX": 300, "maxX": 430, "minZ": 60, "maxZ": 140, "requiredQuestCode": null}, {"zoneId": 5, "minX": 430, "maxX": 560, "minZ": 60, "maxZ": 140, "requiredQuestCode": null}, {"zoneId": 6, "minX": 560, "maxX": 660, "minZ": 0, "maxZ": 200, "requiredQuestCode": null}, {"zoneId": 7, "minX": 660, "maxX": 760, "minZ": 0, "maxZ": 200, "requiredQuestCode": null}, {"zoneId": 8, "minX": 760, "maxX": 960, "minZ": 0, "maxZ": 200, "requiredQuestCode": null}, {"zoneId": 9, "minX": 960, "maxX": 1140, "minZ": 40, "maxZ": 160, "requiredQuestCode": null}, {"zoneId": 10, "minX": 1140, "maxX": 1360, "minZ": 0, "maxZ": 200, "requiredQuestCode": null}, {"zoneId": 11, "minX": 2000, "maxX": 2040, "minZ": 0, "maxZ": 40, "requiredQuestCode": null}, {"zoneId": 12, "minX": 2100, "maxX": 2140, "minZ": 0, "maxZ": 40, "requiredQuestCode": null}, {"zoneId": 13, "minX": 2200, "maxX": 2240, "minZ": 0, "maxZ": 40, "requiredQuestCode": null}, {"zoneId": 101, "minX": 100, "maxX": 300, "minZ": 200, "maxZ": 400, "requiredQuestCode": null}, {"zoneId": 102, "minX": 350, "maxX": 450, "minZ": 200, "maxZ": 400, "requiredQuestCode": null}, {"zoneId": 103, "minX": 550, "maxX": 650, "minZ": 200, "maxZ": 400, "requiredQuestCode": null}, {"zoneId": 104, "minX": 712.5, "maxX": 787.5, "minZ": 212.5, "maxZ": 287.5, "requiredQuestCode": "MQ_BOSS_WORLDTREE"}, {"zoneId": 105, "minX": 850, "maxX": 950, "minZ": 200, "maxZ": 400, "requiredQuestCode": null}, {"zoneId": 106, "minX": 1050, "maxX": 1150, "minZ": 200, "maxZ": 400, "requiredQuestCode": null}, {"zoneId": 107, "minX": 1250, "maxX": 1350, "minZ": 200, "maxZ": 400, "requiredQuestCode": null}, {"zoneId": 108, "minX": 1400, "maxX": 1600, "minZ": 200, "maxZ": 400, "requiredQuestCode": null}, {"zoneId": 181, "minX": 2300, "maxX": 2340, "minZ": 0, "maxZ": 40, "requiredQuestCode": null}, {"zoneId": 182, "minX": 2400, "maxX": 2440, "minZ": 0, "maxZ": 40, "requiredQuestCode": null}, {"zoneId": 900, "minX": 0, "maxX": 1200, "minZ": 0, "maxZ": 25, "requiredQuestCode": null}, {"zoneId": 901, "minX": 0, "maxX": 100, "minZ": 0, "maxZ": 100, "requiredQuestCode": null}, {"zoneId": 201, "minX": 120, "maxX": 280, "minZ": -160, "maxZ": 0, "requiredQuestCode": null}, {"zoneId": 202, "minX": 340, "maxX": 460, "minZ": -200, "maxZ": 0, "requiredQuestCode": null}, {"zoneId": 203, "minX": 520, "maxX": 680, "minZ": -160, "maxZ": 0, "requiredQuestCode": null}, {"zoneId": 204, "minX": 725, "maxX": 775, "minZ": -75, "maxZ": -25, "requiredQuestCode": "MQ2_CORE3"}, {"zoneId": 205, "minX": 840, "maxX": 960, "minZ": -200, "maxZ": 0, "requiredQuestCode": null}, {"zoneId": 206, "minX": 1040, "maxX": 1160, "minZ": -200, "maxZ": 0, "requiredQuestCode": null}, {"zoneId": 207, "minX": 1240, "maxX": 1360, "minZ": -200, "maxZ": 0, "requiredQuestCode": null}, {"zoneId": 208, "minX": 1440, "maxX": 1560, "minZ": -200, "maxZ": 0, "requiredQuestCode": null}, {"zoneId": 209, "minX": 1620, "maxX": 1780, "minZ": -160, "maxZ": 0, "requiredQuestCode": null}, {"zoneId": 281, "minX": 2500, "maxX": 2540, "minZ": 0, "maxZ": 40, "requiredQuestCode": null}, {"zoneId": 282, "minX": 2600, "maxX": 2640, "minZ": 0, "maxZ": 40, "requiredQuestCode": null}];
 
 const ZoneSequences = [1, 2, 5, 3, 6, 4, 7, 8, 9, 10];
 const Waypoints = {
@@ -1510,7 +1576,9 @@ function fetchFriendsList(force = false) {
 	const now = Date.now();
 	if (!force && now - lunLastFriendFetchTime < 60000) return;
 	if (lunFriendFetchInProgress) return;
-	let token = (typeof getAuthToken === "function" ? getAuthToken() : "") || (typeof lunSpkAuthToken === "string" ? lunSpkAuthToken : "");
+	let token = (typeof window.getNativeAuthToken === "function" ? window.getNativeAuthToken() : "") ||
+	            (typeof getAuthToken === "function" ? getAuthToken() : "") || 
+	            (typeof lunSpkAuthToken === "string" ? lunSpkAuthToken : "");
 	if (token.toLowerCase().startsWith("bearer ")) {
 		token = token.substring(7).trim();
 	}
@@ -1531,7 +1599,6 @@ function fetchFriendsList(force = false) {
 					if (nick) lunFriendNicknames.add(nick);
 				}
 			});
-			lunLastFriendFetchTime = Date.now();
 			if (window.localStorage) {
 				try {
 					localStorage.setItem("spkmod-friend-cache", JSON.stringify([...lunFriendNicknames]));
@@ -1540,28 +1607,53 @@ function fetchFriendsList(force = false) {
 		}
 	};
 
-	fetch(targetUrl, {
-		method: "GET",
-		headers: headers,
-		mode: "cors"
-	}).then(async res => {
-		if (!res.ok) {
-			return fetch(targetUrl, { method: "GET", headers: headers, mode: "cors" })
-				.then(r => r.ok ? r.json() : null)
-				.then(d => d && applyFriendData(d));
-		}
-		const data = await res.json();
-		applyFriendData(data);
-	}).catch(() => {
-		fetch(targetUrl, { method: "GET", headers: headers, mode: "cors" })
-			.then(r => r.ok ? r.json() : null)
-			.then(d => d && applyFriendData(d))
-			.catch(err => {
-				console.warn("[SpeakiMod+] Failed to fetch friend list:", err);
+	(async () => {
+		try {
+			let res = await fetch(targetUrl, {
+				method: "GET",
+				headers: headers,
+				mode: "cors"
 			});
-	}).finally(() => {
-		lunFriendFetchInProgress = false;
-	});
+
+			if (res && res.status === 401) {
+				// Token expired. Invalidate cached token
+				window.speakiAuthToken = "";
+				lunSpkAuthToken = "";
+				if (typeof window.refreshAuthToken === "function") {
+					try {
+						const refreshed = await window.refreshAuthToken();
+						if (refreshed) {
+							let newToken = (typeof window.getNativeAuthToken === "function" ? window.getNativeAuthToken() : "") ||
+							               (typeof getAuthToken === "function" ? getAuthToken() : "") || 
+							               (typeof lunSpkAuthToken === "string" ? lunSpkAuthToken : "");
+							if (newToken.toLowerCase().startsWith("bearer ")) {
+								newToken = newToken.substring(7).trim();
+							}
+							if (newToken) {
+								headers["authorization"] = `Bearer ${newToken}`;
+								res = await fetch(targetUrl, {
+									method: "GET",
+									headers: headers,
+									mode: "cors"
+								});
+							}
+						}
+					} catch (_) {}
+				}
+			}
+
+			if (res && res.ok) {
+				const data = await res.json();
+				applyFriendData(data);
+			}
+		} catch (err) {
+			console.warn("[SpeakiMod+] Failed to fetch friend list:", err);
+		} finally {
+			// Ensure cooldown is ALWAYS recorded to prevent per-frame request flood
+			lunLastFriendFetchTime = Date.now();
+			lunFriendFetchInProgress = false;
+		}
+	})();
 }
 
 const lunKnownBotNames = ["GniloeAlo3", "Gniloe41o3", "Gniloe41oe", "GniloeA1oe", "GniloeA1o3", "GniloeA103", "toufufuton", "uhu", "clay79", "key7catace", "6air9dog5", "53lake", "1sealace", "2wave0bay1", "19owlfern", "red17wave", "nekomaru2", "king9SPK5", "ash6mist7", "takutaku8", "스핔이3984", "SPKtree21", "SPKleaf37", "3clayowl5", "3bayhero9", "99duckdog", "cow6SPK2", "fire8SPK7", "Takutaku3", "Takutaku4", "kutakuta", "0birdice2", "wind2SPK8", "SPKbay23", "3sky8king", "star2bat04", "map3kite4", "FrznTeardrop", "sun9SPK0", "5SPKsnow2", "SPKclay15", "frogfox40", "5air7moon", "SPKair00", "SPKblue88", "moss4ant36", "9gem4wind", "SPKjade05", "SPKfin06", "SPKdeer69", "OO0OOOOO72", "llIlIIll62", "lIllIIIl39", "IIlIIIlI45", "00OO0OO099", "sorakara", "karakaze", "rainant78", "SPKlake78", "takutaku7", "rnmrrnvrm2", "SPKfern89", "llIIllll38", "SPKtree03", "OO0O00OO30", "SPKecho92", "OOOOO0O081", "takutaku6", "kutakuta2", "GOODSPIKI", "BADSPIKI", "NEXThobagi", "QAZWSXEDC", "kqland", "SPKsun83", "CHOWAYOHOBAG", "AdmiralSPK", "xHunterSPKx", "HOBAGIRENGOU", "TOKAlhobagi", "chowayooo5", "NELSPK", "TOKAIhobagi", "hobagihouse", "NORDSPEAKI", "LOGIN", "FunnySPK", "JpTHEspeaki", "MEXICOSPK", "JAXNOTD", "DDDDDDAA", "NOMUT", "alexasojk", "gotobasupk", "Nyandal", "amejiso", "SPKcalm33", "SPKtree51", "snowfin05", "fernhat76", "SPKhero04", "jadenet92", "000OO00O82", "00O000O081", "frogbee79", "00O000O081", "OOOOOO0030", "OOOOOO0081", "IIIIIII06", "lllllll06", "IIIIIII47", "lllllll47", "SPKecho92", "SPKtree03", "SPKstar65", "blueash78", "SPKfrog11", "OOOOOOO030", "OOOOOOO081", "IIIIIIII06", "IIIIIIII47", "IIlIIIll47", "OO0O00OO30", "IIlIIIll47", "OO0O00OO30", "llIIlIll06", "IIlIIIll47", "OOOOO0O081", "llIIlIll06", "OO0O00OO30", "SPKfern89", "SPKtree03", "rnmrrnvrm2", "SPKblue93", "SPKrain63", "SPKecho98", "OOOOO0O081", "duckjay85", "SPKstar65", "echosun86", "llIIllll38", "takutaku6", "kutakuta2", "takutaku7", "GniloeAlo3", "Gniloe4103", "Gniloe41o3", "GniloeAl03", "Gniloe41oe", "GniloeA1o3", "Gniloe41o3", "GniloeAlo3", "GniloeAl03", "Gniloe41oe"];
@@ -1590,13 +1682,14 @@ function setMentionPingEnabled(enabled) {
 	if (window.localStorage) localStorage.setItem("spkmod-mention-ping", lunMentionPingEnabled ? "true" : "false");
 }
 
+let _activePingAudio = null;
 function playPingSound() {
-    if (typeof isGameMuted === "function" && isGameMuted()) return;
-    // Use the native game audio URL for the mention ping
+    // If Mention Ping Sound is enabled, always sound regardless of Mute when Minimized / alt-tab
+    if (typeof lunMentionPingEnabled !== "undefined" && !lunMentionPingEnabled) return;
     try {
-        const pingAudio = new window.Audio("https://speakirpg.overture.io.kr/audio/voice/speaki/No.mp3");
-        pingAudio.volume = 0.6;
-        pingAudio.play().catch(e => {
+        _activePingAudio = new window.Audio("https://speakirpg.overture.io.kr/audio/voice/speaki/No.mp3");
+        _activePingAudio.volume = 0.6;
+        _activePingAudio.play().catch(e => {
             console.warn("[SpeakiMod+] Failed to play ping sound", e);
         });
     } catch (e) {}
@@ -2359,6 +2452,17 @@ function handleMinimizeState(isMinimized) {
 if (typeof document !== "undefined") {
 	document.addEventListener("visibilitychange", () => {
 		handleMinimizeState(document.hidden);
+	});
+}
+
+// Hook window blur and focus for Alt-Tab / background switching
+if (typeof window !== "undefined") {
+	window.addEventListener("blur", () => {
+		if (document.activeElement && document.activeElement.tagName === "IFRAME") return;
+		handleMinimizeState(true);
+	});
+	window.addEventListener("focus", () => {
+		handleMinimizeState(false);
 	});
 }
 
@@ -11465,7 +11569,7 @@ let mapUpdateFrame = null;
 // ---- World map viewport (pan / pinch-zoom) ----
 // The map is laid out in a fixed 1000x400 logical space. On small screens we keep
 // that space at a readable scale and show it through a small, pannable window.
-const MAP_LW = 1000, MAP_LH = 400;
+let MAP_LW = 1000, MAP_LH = 520; // re-synced from the canvas size right after the map modal is built
 // Tune these to change how tall the map window is on small screens.
 const MAP_H_RATIO_PORTRAIT = 0.38;  // portrait:  38% of screen height
 const MAP_H_RATIO_LANDSCAPE = 0.58; // landscape: 58% of screen height
@@ -11506,9 +11610,6 @@ function layoutMapModal() {
 		if (mapModalElements.fitBtn) mapModalElements.fitBtn.style.display = "";
 		if (mapModalElements.btnRow) mapModalElements.btnRow.style.marginTop = "12px";
 		if (mapModalElements.closeBtn) { mapModalElements.closeBtn.style.padding = "8px 20px"; mapModalElements.closeBtn.style.minHeight = "40px"; }
-		// Do NOT add #spkmod-map-modal to the --spkmod-scale transform rule in updateDynamicStyles(), because this window sizes itself
-		// in layoutMapModal(); pin --spkmod-scale to 1 here so makeDraggable doesn't divide the drag distance by the mobile UI scale (0.55)
-		m.style.setProperty("--spkmod-scale", "1");
 		mapView.dpr = Math.min(window.devicePixelRatio || 1, 2);
 		if (window.innerHeight >= window.innerWidth) {
 			// Portrait: full width, canvas height = MAP_H_RATIO_PORTRAIT of the screen height.
@@ -11653,13 +11754,15 @@ function updateMapLoop() {
 		}
 	}
 
-	let rows = [[], [], []];
-	for (const zone of WorldZones) {
+	let rows = [[], [], [], []];
+	const allZones = (typeof window !== "undefined" && window.WorldZones) ? window.WorldZones : (typeof WorldZones !== "undefined" ? WorldZones : []);
+	for (const zone of allZones) {
 		if (!connectedZones.has(zone.zoneId)) continue;
 		const cz = (zone.minZ + zone.maxZ) / 2;
-		if (cz <= 0) rows[0].push(zone);
-		else if (cz <= 200) rows[1].push(zone);
-		else rows[2].push(zone);
+		if (cz < -500) rows[0].push(zone);      // World 4: Thunder/Mist (Zones 301-309, Z ~ -850)
+		else if (cz <= 0) rows[1].push(zone);   // World 3: Core/Underground (Zones 201-209, Z ~ -100)
+		else if (cz <= 200) rows[2].push(zone); // World 1: Overworld (Zones 1-10, Z ~ 100)
+		else rows[3].push(zone);                // World 2: World Tree (Zones 101-108, Z ~ 300)
 	}
 	
 	rows.forEach(r => r.sort((a,b) => ((a.minX+a.maxX)/2) - ((b.minX+b.maxX)/2)));
@@ -11668,14 +11771,18 @@ function updateMapLoop() {
 	const boxW = 66;
 	const boxH = 36;
 	
-	for (let r=0; r<3; r++) {
-		if (rows[r].length === 0) continue;
-		let spacingX = drawW / rows[r].length;
-		for (let i=0; i<rows[r].length; i++) {
-			let z = rows[r][i];
+	const activeRows = rows.map((r, idx) => ({ row: r, idx })).filter(item => item.row.length > 0);
+	const totalActive = activeRows.length || 1;
+	const rowSpacingY = totalActive > 1 ? (drawH - boxH) / (totalActive - 1) : 0;
+	
+	for (let i = 0; i < activeRows.length; i++) {
+		const rList = activeRows[i].row;
+		let spacingX = drawW / rList.length;
+		for (let j = 0; j < rList.length; j++) {
+			let z = rList[j];
 			zonePos[z.zoneId] = {
-				x: padding + i * spacingX + spacingX/2,
-				y: padding + boxH/2 + r * ((drawH - boxH) / 2),
+				x: padding + j * spacingX + spacingX/2,
+				y: padding + boxH/2 + i * rowSpacingY,
 				zone: z
 			};
 		}
@@ -11718,9 +11825,14 @@ function updateMapLoop() {
 
 	ctx.strokeStyle = "rgba(255, 200, 50, 0.4)";
 	ctx.lineWidth = 1.5;
+	const drawnConnections = new Set();
 	for (const src in Portals) {
 		for (const tgt in Portals[src]) {
+			const pairKey = parseInt(src) < parseInt(tgt) ? `${src}-${tgt}` : `${tgt}-${src}`;
+			if (drawnConnections.has(pairKey)) continue;
+
 			if (Portals[tgt] && Portals[tgt][src] && zonePos[src] && zonePos[tgt]) {
+				drawnConnections.add(pairKey);
 				const p1 = zonePos[src];
 				const p2 = zonePos[tgt];
 				const pInfo1 = Portals[src][tgt];
@@ -11733,11 +11845,31 @@ function updateMapLoop() {
 					if (lPos1 && lPos2) {
 						ctx.beginPath();
 						ctx.moveTo(lPos1.x, lPos1.y);
-						if (Math.abs(lPos1.y - lPos2.y) > 10) { 
-							ctx.lineTo(lPos1.x, (lPos1.y + lPos2.y)/2);
-							ctx.lineTo(lPos2.x, (lPos1.y + lPos2.y)/2);
+						
+						const dy = Math.abs(p1.y - p2.y);
+						if (dy > 10) {
+							// If connecting across non-adjacent rows (e.g. World 1 to World 4 skipping over World 3),
+							// route through the left margin track so it doesn't slice through intermediate zone boxes!
+							if (dy > rowSpacingY * 1.5) {
+								const lowerPos = p1.y > p2.y ? lPos1 : lPos2;
+								const upperPos = p1.y > p2.y ? lPos2 : lPos1;
+								const lowerZone = p1.y > p2.y ? p1 : p2;
+								const gapY = lowerZone.y - boxH/2 - (rowSpacingY - boxH) / 2;
+								const marginTrackX = 14;
+
+								ctx.lineTo(lowerPos.x, gapY);
+								ctx.lineTo(marginTrackX, gapY);
+								ctx.lineTo(marginTrackX, upperPos.y);
+								ctx.lineTo(upperPos.x, upperPos.y);
+							} else {
+								const midY = (lPos1.y + lPos2.y) / 2;
+								ctx.lineTo(lPos1.x, midY);
+								ctx.lineTo(lPos2.x, midY);
+								ctx.lineTo(lPos2.x, lPos2.y);
+							}
+						} else {
+							ctx.lineTo(lPos2.x, lPos2.y);
 						}
-						ctx.lineTo(lPos2.x, lPos2.y);
 						ctx.stroke();
 					}
 				}
@@ -11811,7 +11943,9 @@ function updateMapLoop() {
 			ctx.font = "bold 9px sans-serif";
 			ctx.textAlign = "center";
 			ctx.textBaseline = "middle";
-			ctx.fillText(isUnlocked ? `⚔️ LV${raid.requiredLevel}` : `🔒 LV${raid.requiredLevel}`, zp.x, pillY + pillH / 2 + 0.5);
+			const reqLvl = raid.requiredLevel || 1;
+			const displayLvl = raid.bossLevel || reqLvl;
+			ctx.fillText(isUnlocked ? `⚔️ LV${displayLvl}` : `🔒 LV${reqLvl}`, zp.x, pillY + pillH / 2 + 0.5);
 			ctx.restore();
 		}
 	}
@@ -11875,7 +12009,7 @@ document.body.appendChild(
 		mapModalElements.titleLabel = buildElement("div", { style: "font-size: 18px; font-weight: bold; margin-bottom: 15px; cursor: move; width: 100%; text-align: center; user-select: none;", innerText: t("mapModalTitle") }),
 		mapModalElements.canvas = buildElement("canvas", {
 			width: 1000,
-			height: 400,
+			height: 520,
 			style: "border: 1px solid #666; border-radius: 4px; background: #080808; width: 1000px;"
 		}),
 		mapModalElements.btnRow = buildElement("div", { style: "display: flex; gap: 8px; margin-top: 15px; align-items: center;" }, [
@@ -11899,6 +12033,9 @@ document.body.appendChild(
 		])
 	])
 );
+// Do NOT add #spkmod-map-modal to the --spkmod-scale transform rule in updateDynamicStyles(), because this window sizes itself
+// in layoutMapModal(); pin --spkmod-scale to 1 here so makeDraggable doesn't divide the drag distance by the mobile UI scale (0.55)
+mapModalElements.modalWindow.style.setProperty("--spkmod-scale", "1");
 
 document.body.appendChild(
 	lunHudElements.eventModal = buildElement("div", {
@@ -17240,9 +17377,10 @@ async function fetchAllQuests() {
 	if (_fetchingQuests) return;
 	_fetchingQuests = true;
 	try {
-		const token = typeof getAuthToken === "function" ? getAuthToken() : "";
-		const headers = { "Content-Type": "application/json" };
-		if (token) headers["authorization"] = `Bearer ${token}`;
+		const token = (typeof window.getNativeAuthToken === "function" ? window.getNativeAuthToken() : "") ||
+		              (typeof getAuthToken === "function" ? getAuthToken() : "");
+		const headers = {};
+		if (token) headers["authorization"] = `Bearer ${token.replace(/^Bearer /i, "")}`;
 
 		const endpoint = window.lunActiveApiEndpoint ||
 		                 (window.speakiServerEndpoint ? window.speakiServerEndpoint : "") ||
@@ -17253,7 +17391,7 @@ async function fetchAllQuests() {
 				const res = await fetch(`${endpoint}/api/quests?period=${p}`, {
 					method: "GET",
 					headers: headers,
-					credentials: "include"
+					mode: "cors"
 				});
 				if (res.ok) {
 					const data = await res.json();
@@ -17960,9 +18098,10 @@ function tick() {
 	if (lunPinnedQuestId && lunTickCount >= lunPinnedQuestNextQueryTick) {
 		lunPinnedQuestNextQueryTick = lunTickCount + lunPinnedQuestInterval;
 		const period = lunPinnedQuestPeriod || "daily";
-		const token = typeof getAuthToken === "function" ? getAuthToken() : "";
-		const headers = { "Content-Type": "application/json" };
-		if (token) headers["authorization"] = `Bearer ${token}`;
+		const token = (typeof window.getNativeAuthToken === "function" ? window.getNativeAuthToken() : "") ||
+		              (typeof getAuthToken === "function" ? getAuthToken() : "");
+		const headers = {};
+		if (token) headers["authorization"] = `Bearer ${token.replace(/^Bearer /i, "")}`;
 
 		const endpoint = window.lunActiveApiEndpoint ||
 		                 (window.speakiServerEndpoint ? window.speakiServerEndpoint : "") ||
@@ -17970,7 +18109,7 @@ function tick() {
 		fetch(`${endpoint}/api/quests?period=${period}`, {
 			method: "GET",
 			headers: headers,
-			credentials: "include"
+			mode: "cors"
 		}).then(async x => {
 			if (!x.ok) {
 				if (x.status === 404) {
