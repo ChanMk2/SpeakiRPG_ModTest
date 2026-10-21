@@ -12036,6 +12036,9 @@ document.body.appendChild(
 // Do NOT add #spkmod-map-modal to the --spkmod-scale transform rule in updateDynamicStyles(), because this window sizes itself
 // in layoutMapModal(); pin --spkmod-scale to 1 here so makeDraggable doesn't divide the drag distance by the mobile UI scale (0.55)
 mapModalElements.modalWindow.style.setProperty("--spkmod-scale", "1");
+// Fucking Important! Logical map size = the canvas size set above, so a future upstream change to it is followed automatically.
+MAP_LW = mapModalElements.canvas.width; MAP_LH = mapModalElements.canvas.height;
+mapView.viewW = MAP_LW; mapView.viewH = MAP_LH;
 
 document.body.appendChild(
 	lunHudElements.eventModal = buildElement("div", {
