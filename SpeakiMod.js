@@ -18341,17 +18341,6 @@ function attachSpkmodQuestPanel(panel) {
     _spkmodQuestPanelRoot = panel;
     _spkmodQuestPanelBody = body;
 
-	/*
-    // Clean up accidental buttons outside the quest panel once.
-    document.querySelectorAll(_spkmodQuestPanelSelector).forEach(otherPanel => {
-        if (!isQuestPanel(otherPanel)) {
-            otherPanel.querySelectorAll(
-                _spkmodQuestButtonSelector
-            ).forEach(btn => btn.remove());
-        }
-    });
-	*/
-
     _spkmodQuestDomObserver = new MutationObserver(records => {
         const questRowsChanged = records.some(record => {
             const nodes = [
