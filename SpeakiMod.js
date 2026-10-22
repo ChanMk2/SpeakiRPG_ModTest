@@ -18429,37 +18429,6 @@ function observeSpkmodQuestPanel() {
     return false;
 }
 
-window.__spkmodQuestDebug = function () {
-    const root = _spkmodQuestPanelRoot;
-    const body = _spkmodQuestPanelBody;
-
-    return {
-        rootExists: !!root,
-        rootConnected: root?.isConnected ?? false,
-
-        bodyExists: !!body,
-        bodyConnected: body?.isConnected ?? false,
-        bodyInsideRoot: !!(root && body && root.contains(body)),
-
-        isQuestPanel: root ? isQuestPanel(root) : null,
-
-        questObserverExists: !!_spkmodQuestDomObserver,
-        initObserverExists: !!_spkmodQuestInitObserver,
-
-        scanPending: _spkmodQuestScanPending,
-
-        listItemCount:
-            body?.querySelectorAll(".sr-list-item").length ?? null,
-
-        buttonCount:
-            body?.querySelectorAll(_spkmodQuestButtonSelector).length ?? null,
-
-        panelText: root
-            ? (root.innerText || "").replace(/\s+/g, " ").slice(0, 100)
-            : null
-    };
-};
-
 function injectPinButtonsIntoQuestList() {
     const panel = _spkmodQuestPanelRoot;
     const panelBody = _spkmodQuestPanelBody;
