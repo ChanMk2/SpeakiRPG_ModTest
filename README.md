@@ -1,1 +1,1 @@
-SpeakiRPG Mod Mobile Client Test
+SpeakiRPG Mod Test
