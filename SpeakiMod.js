@@ -18268,7 +18268,7 @@ function matchQuestFromTitleText(titleText, item) {
 	const virtualId = "v_" + Math.abs(hash);
 
 	let period = "daily";
-	const activeTab = document.querySelector(".sr-panel__tabs .sr-btn--secondary, .sr-panel__tabs .active");
+	const activeTab = (_spkmodQuestPanelRoot || document).querySelector(".sr-panel__tabs .sr-btn--secondary, .sr-panel__tabs .active");
 	if (activeTab) {
 		const tabText = (activeTab.textContent || "").toLowerCase();
 		if (tabText.includes("stand") || tabText.includes("perma") || tabText.includes("상시") || tabText.includes("常設") || tabText.includes("permanente")) period = "permanent";
@@ -18287,11 +18287,18 @@ function matchQuestFromTitleText(titleText, item) {
 	};
 }
 
+// Cached references for the game quest panel
 let _spkmodQuestPanelRoot = null;
 let _spkmodQuestPanelBody = null;
 let _spkmodQuestDomObserver = null;
+let _spkmodQuestInitObserver = null;
 let _spkmodQuestScanPending = false;
-let _spkmodQuestObserveRetryCount = 0;
+
+const _spkmodQuestPanelSelector =
+    ".sr-panel, .sr-modal, .sr-dialog, [role='dialog']";
+
+const _spkmodQuestButtonSelector =
+    ".spkmod-pq-button, .spkmod-star-button, .spkmod-list-button";
 
 function scheduleSpkmodQuestPinScan() {
     if (_spkmodQuestScanPending) return;
@@ -18302,44 +18309,25 @@ function scheduleSpkmodQuestPinScan() {
         _spkmodQuestScanPending = false;
 
         if (
-            _spkmodQuestPanelBody &&
-            _spkmodQuestPanelBody.isConnected
+            !_spkmodQuestPanelRoot?.isConnected ||
+            !_spkmodQuestPanelBody?.isConnected
         ) {
-            injectPinButtonsIntoQuestList();
-        } else {
-            observeSpkmodQuestPanel();
+            return;
         }
+
+        injectPinButtonsIntoQuestList();
     });
 }
 
-function observeSpkmodQuestPanel() {
-    let questPanel = null;
+function attachSpkmodQuestPanel(panel) {
+    if (!panel || !isQuestPanel(panel)) return false;
 
-    for (const tabs of document.querySelectorAll(".sr-panel__tabs")) {
-        const panel = tabs.closest(
-            ".sr-panel, .sr-modal, .sr-dialog, [role='dialog']"
-        );
-
-        if (panel && isQuestPanel(panel)) {
-            questPanel = panel;
-            break;
-        }
-    }
-
-    const questBody = questPanel?.querySelector(".sr-panel__body");
-
-    if (!questPanel || !questBody) {
-        if (_spkmodQuestObserveRetryCount < 20) {
-            _spkmodQuestObserveRetryCount++;
-            setTimeout(observeSpkmodQuestPanel, 250);
-        }
-        return false;
-    }
-
-    _spkmodQuestObserveRetryCount = 0;
+    const body = panel.querySelector(".sr-panel__body");
+    if (!body) return false;
 
     if (
-        _spkmodQuestPanelBody === questBody &&
+        panel === _spkmodQuestPanelRoot &&
+        body === _spkmodQuestPanelBody &&
         _spkmodQuestDomObserver
     ) {
         return true;
@@ -18347,22 +18335,32 @@ function observeSpkmodQuestPanel() {
 
     if (_spkmodQuestDomObserver) {
         _spkmodQuestDomObserver.disconnect();
+        _spkmodQuestDomObserver = null;
     }
 
-    _spkmodQuestPanelRoot = questPanel;
-    _spkmodQuestPanelBody = questBody;
+    _spkmodQuestPanelRoot = panel;
+    _spkmodQuestPanelBody = body;
+
+    // Clean up accidental buttons outside the quest panel once.
+    document.querySelectorAll(_spkmodQuestPanelSelector).forEach(otherPanel => {
+        if (!isQuestPanel(otherPanel)) {
+            otherPanel.querySelectorAll(
+                _spkmodQuestButtonSelector
+            ).forEach(btn => btn.remove());
+        }
+    });
 
     _spkmodQuestDomObserver = new MutationObserver(records => {
         const questRowsChanged = records.some(record => {
-            const changedNodes = [
+            const nodes = [
                 ...record.addedNodes,
                 ...record.removedNodes
             ];
 
-            return changedNodes.some(node =>
+            return nodes.some(node =>
                 node.nodeType === 1 && (
-                    node.matches?.(".sr-list-item") ||
-                    node.querySelector?.(".sr-list-item")
+                    node.matches(".sr-list-item") ||
+                    node.querySelector(".sr-list-item")
                 )
             );
         });
@@ -18372,34 +18370,87 @@ function observeSpkmodQuestPanel() {
         }
     });
 
-    _spkmodQuestDomObserver.observe(questBody, {
+    // Observe only direct children of the quest list body.
+    _spkmodQuestDomObserver.observe(body, {
         childList: true
     });
+
+    if (_spkmodQuestInitObserver) {
+        _spkmodQuestInitObserver.disconnect();
+        _spkmodQuestInitObserver = null;
+    }
 
     scheduleSpkmodQuestPinScan();
     return true;
 }
 
+function observeSpkmodQuestPanel() {
+    // Already initialized: reuse the cached references.
+    if (
+        _spkmodQuestPanelRoot?.isConnected &&
+        _spkmodQuestPanelBody?.isConnected &&
+        _spkmodQuestDomObserver
+    ) {
+        return true;
+    }
+
+    // Find the existing quest panel once.
+    for (const panel of document.querySelectorAll(
+        _spkmodQuestPanelSelector
+    )) {
+        if (attachSpkmodQuestPanel(panel)) {
+            return true;
+        }
+    }
+
+    // Fallback only if the panel has not been mounted yet.
+    // This is event-driven, not a timer or polling loop.
+    if (!_spkmodQuestInitObserver && document.body) {
+        _spkmodQuestInitObserver = new MutationObserver(records => {
+            const possiblePanelAdded = records.some(record =>
+                [...record.addedNodes].some(node => {
+                    if (node.nodeType !== 1) return false;
+
+                    return (
+                        node.matches?.(_spkmodQuestPanelSelector) ||
+                        node.closest?.(_spkmodQuestPanelSelector) ||
+                        node.querySelector?.(_spkmodQuestPanelSelector)
+                    );
+                })
+            );
+
+            if (!possiblePanelAdded) return;
+
+            for (const panel of document.querySelectorAll(
+                _spkmodQuestPanelSelector
+            )) {
+                if (attachSpkmodQuestPanel(panel)) {
+                    return;
+                }
+            }
+        });
+
+        _spkmodQuestInitObserver.observe(document.body, {
+            childList: true,
+            subtree: true
+        });
+    }
+
+    return false;
+}
+
 function injectPinButtonsIntoQuestList() {
-    // Only scan the cached quest panel.
-    const questPanel = _spkmodQuestPanelRoot;
+    const panel = _spkmodQuestPanelRoot;
+    const panelBody = _spkmodQuestPanelBody;
 
-    if (!questPanel || !questPanel.isConnected) return;
+    if (!panel || !panel.isConnected || !panelBody || !panelBody.isConnected) {
+        return;
+    }
 
-    const panelBodies = questPanel.querySelectorAll(".sr-panel__body");
-    if (!panelBodies.length) return;
+    const items = panelBody.querySelectorAll(".sr-list-item");
+    if (!items.length) return;
 
-    panelBodies.forEach(panelBody => {
-        const panel = panelBody.closest(
-            ".sr-panel, .sr-modal, .sr-dialog, [role='dialog']"
-        ) || panelBody.parentElement;
-
-        if (panel !== questPanel) return;
-
-		const items = panelBody.querySelectorAll(".sr-list-item");
-		if (!items.length) return;
-
-		items.forEach(item => {
+    items.forEach(item => {
 			// Item-level guard: never attach pin button if item has currency / price indicators or shop actions
 			if (item.querySelector(".sr-currency, .sr-price") || /leave shop|buy item/i.test(item.textContent)) {
 				item.querySelectorAll(".spkmod-pq-button, .spkmod-star-button, .spkmod-list-button").forEach(btn => btn.remove());
@@ -18510,8 +18561,7 @@ function injectPinButtonsIntoQuestList() {
 				topRow.appendChild(starBtn);
 				topRow.appendChild(pinBtn);
 			}
-		});
-	});
+    });
 }
 
 function onGameDataUpdate() {
@@ -21603,7 +21653,7 @@ function onInGameReady() {
 		fetchAllQuests();
 	}
 	if (typeof observeSpkmodQuestPanel === "function") {
-    	observeSpkmodQuestPanel();
+	    observeSpkmodQuestPanel();
 	}
 	const hudEl = document.getElementById("spkmod-hud");
 	if (hudEl) hudEl.classList.remove("hidden");
