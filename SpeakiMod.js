@@ -21844,33 +21844,3 @@ setTimeout(() => {
 		if (typeof updateDynamicStyles === "function") updateDynamicStyles();
 	}
 }, 1000);
-
-
-
-
-
-window.__spkmodQuestDebug = function () {
-    return {
-        buildMarker: "quest-cache-debug-1",
-
-        rootExists: !!_spkmodQuestPanelRoot,
-        rootConnected: !!_spkmodQuestPanelRoot?.isConnected,
-
-        bodyExists: !!_spkmodQuestPanelBody,
-        bodyConnected: !!_spkmodQuestPanelBody?.isConnected,
-
-        bodyInsideRoot: !!(
-            _spkmodQuestPanelRoot &&
-            _spkmodQuestPanelBody &&
-            _spkmodQuestPanelRoot.contains(_spkmodQuestPanelBody)
-        ),
-
-        questObserverExists: !!_spkmodQuestDomObserver,
-        initObserverExists: !!_spkmodQuestInitObserver,
-
-        scanPending: _spkmodQuestScanPending,
-
-        listItemCount:
-            _spkmodQuestPanelBody?.querySelectorAll(".sr-list-item").length ?? null
-    };
-};
