@@ -18395,7 +18395,6 @@ function observeSpkmodQuestPanel() {
     }
 
     // Fallback only if the panel has not been mounted yet.
-    // This is event-driven, not a timer or polling loop.
     if (!_spkmodQuestInitObserver && document.body) {
         _spkmodQuestInitObserver = new MutationObserver(records => {
             const possiblePanelAdded = records.some(record =>
