@@ -131,7 +131,13 @@ if (!window.__speakiFetchHooked) {
 						for (const q of data) {
 							if (q && q.questId) {
 								window.__spkmodCachedQuests[q.questId] = q;
-								if (typeof lunPinnedQuestId !== "undefined" && lunPinnedQuestId && String(lunPinnedQuestId) === String(q.questId)) {
+								if (q.isClaimed) {
+									const removed = clearClaimedQuestPin(q);
+									if (removed && typeof renderQuestChecklist === "function") {
+										renderQuestChecklist();
+									}
+								}
+								else if (typeof lunPinnedQuestId !== "undefined" && lunPinnedQuestId && String(lunPinnedQuestId) === String(q.questId)) {
 									if (typeof updatePinnedQuestDisplay === "function") {
 										updatePinnedQuestDisplay(q);
 									}
@@ -17929,15 +17935,8 @@ async function fetchAllQuests() {
 								q.period = q.period || p;
 								window.__spkmodCachedQuests[q.questId] = q;
 								if (q.isClaimed) {
-									const pins = getChecklistPinnedIds();
-									if (pins.some(id => String(id) === String(q.questId))) {
-										setChecklistPinnedIds(pins.filter(id => String(id) !== String(q.questId)));
-									}
-									if (lunPinnedQuestId && String(lunPinnedQuestId) === String(q.questId)) {
-										unpinQuest();
-									}
-								}
-								else if (lunPinnedQuestId && String(lunPinnedQuestId) === String(q.questId)) {
+									clearClaimedQuestPin(q);
+								} else if (lunPinnedQuestId && String(lunPinnedQuestId) === String(q.questId)) {
 									updatePinnedQuestDisplay(q);
 								}
 							}
@@ -17969,6 +17968,31 @@ function setChecklistPinnedIds(ids) {
 	try {
 		localStorage.setItem("spkmod-checklist-pins", JSON.stringify(ids));
 	} catch (_) {}
+}
+
+function clearClaimedQuestPin(quest) {
+    if (!quest || !quest.questId || !quest.isClaimed) {
+        return false;
+    }
+
+    const questId = String(quest.questId);
+    const pinnedIds = getChecklistPinnedIds();
+    const remainingIds = pinnedIds.filter(id => String(id) !== questId);
+	const removed = remainingIds.length !== pinnedIds.length;
+
+    if (removed) {
+        setChecklistPinnedIds(remainingIds);
+    }
+
+    if (lunPinnedQuestId && String(lunPinnedQuestId) === questId) {
+        unpinQuest();
+    }
+
+    if (removed && typeof refreshPinButtons === "function") {
+        refreshPinButtons();
+    }
+
+    return removed;
 }
 
 function isChecklistPinned(questId) {
