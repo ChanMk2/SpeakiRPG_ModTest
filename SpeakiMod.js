@@ -123,6 +123,16 @@ if (!window.__speakiFetchHooked) {
 		const res = await origFetch.apply(this, args);
 		try {
 			const url = typeof resource === "string" ? resource : (resource?.url || "");
+			// Detect a successful quest reward claim from the game UI.
+			const method = String(config?.method || resource?.method || "GET").toUpperCase();			
+			const claimMatch = url.match(/\/api\/quests\/([^/?#]+)\/claim(?:[/?#]|$)/i);
+			if (method === "POST" && res.ok && claimMatch) {
+				const questId = decodeURIComponent(claimMatch[1]);
+				console.info("[SpeakiMod+] Quest reward claimed; clearing pins:", questId);
+				if (typeof clearClaimedQuestPin === "function") {
+					clearClaimedQuestPin({questId: questId, isClaimed: true});
+				}
+			}
 			if (url && url.includes("/api/quests")) {
 				const clone = res.clone();
 				clone.json().then(data => {
@@ -17883,10 +17893,7 @@ function hookQuestManagerOnce() {
 			qmProto.handleClaim = async function (quest, btn) {
 				const res = await hkHandleClaim.apply(this, arguments);
 				if (quest && quest.questId) {
-					clearClaimedQuestPin({
-						questId: quest.questId,
-						isClaimed: true
-					});
+					clearClaimedQuestPin({questId: quest.questId, isClaimed: true});
 				}
 				if (typeof refreshPinButtons === "function") refreshPinButtons();
 				if (typeof renderQuestChecklist === "function") renderQuestChecklist();
