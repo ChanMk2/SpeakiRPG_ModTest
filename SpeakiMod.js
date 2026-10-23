@@ -18101,6 +18101,7 @@ async function claimQuest(questId) {
 				window.__spkmodCachedQuests[questId].isClaimed = true;
 				window.__spkmodCachedQuests[questId].isCompleted = true;
 			}
+			clearClaimedQuestPin({questId: questId, isClaimed: true});
 			if (lunPinnedQuestId && String(lunPinnedQuestId) === String(questId)) {
 				unpinQuest();
 			}
