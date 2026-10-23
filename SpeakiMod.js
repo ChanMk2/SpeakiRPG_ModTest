@@ -17882,9 +17882,13 @@ function hookQuestManagerOnce() {
 			const hkHandleClaim = qmProto.handleClaim;
 			qmProto.handleClaim = async function (quest, btn) {
 				const res = await hkHandleClaim.apply(this, arguments);
-				if (quest && quest.questId && lunPinnedQuestId && String(lunPinnedQuestId) === String(quest.questId)) {
-					unpinQuest();
+				if (quest && quest.questId) {
+					clearClaimedQuestPin({
+						questId: quest.questId,
+						isClaimed: true
+					});
 				}
+				if (typeof refreshPinButtons === "function") refreshPinButtons();
 				if (typeof renderQuestChecklist === "function") renderQuestChecklist();
 				return res;
 			};
