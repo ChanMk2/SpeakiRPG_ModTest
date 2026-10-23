@@ -17892,10 +17892,9 @@ function hookQuestManagerOnce() {
 			const hkHandleClaim = qmProto.handleClaim;
 			qmProto.handleClaim = async function (quest, btn) {
 				const res = await hkHandleClaim.apply(this, arguments);
-				if (quest && quest.questId) {
-					clearClaimedQuestPin({questId: quest.questId, isClaimed: true});
+				if (quest && quest.questId && lunPinnedQuestId && String(lunPinnedQuestId) === String(quest.questId)) {
+					unpinQuest();
 				}
-				if (typeof refreshPinButtons === "function") refreshPinButtons();
 				if (typeof renderQuestChecklist === "function") renderQuestChecklist();
 				return res;
 			};
@@ -17945,9 +17944,7 @@ async function fetchAllQuests() {
 							if (q && q.questId) {
 								q.period = q.period || p;
 								window.__spkmodCachedQuests[q.questId] = q;
-								if (q.isClaimed) {
-									clearClaimedQuestPin(q);
-								} else if (lunPinnedQuestId && String(lunPinnedQuestId) === String(q.questId)) {
+								if (lunPinnedQuestId && String(lunPinnedQuestId) === String(q.questId)) {
 									updatePinnedQuestDisplay(q);
 								}
 							}
@@ -18112,7 +18109,6 @@ async function claimQuest(questId) {
 				window.__spkmodCachedQuests[questId].isClaimed = true;
 				window.__spkmodCachedQuests[questId].isCompleted = true;
 			}
-			clearClaimedQuestPin({questId: questId, isClaimed: true});
 			if (lunPinnedQuestId && String(lunPinnedQuestId) === String(questId)) {
 				unpinQuest();
 			}
