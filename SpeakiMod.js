@@ -17933,8 +17933,11 @@ async function fetchAllQuests() {
 									if (pins.some(id => String(id) === String(q.questId))) {
 										setChecklistPinnedIds(pins.filter(id => String(id) !== String(q.questId)));
 									}
+									if (lunPinnedQuestId && String(lunPinnedQuestId) === String(q.questId)) {
+										unpinQuest();
+									}
 								}
-								if (lunPinnedQuestId && String(lunPinnedQuestId) === String(q.questId)) {
+								else if (lunPinnedQuestId && String(lunPinnedQuestId) === String(q.questId)) {
 									updatePinnedQuestDisplay(q);
 								}
 							}
