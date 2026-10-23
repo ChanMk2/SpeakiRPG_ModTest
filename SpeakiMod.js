@@ -3752,6 +3752,8 @@ var lunBgOpacity = (window.localStorage && localStorage.getItem("spkmod-bg-opaci
 var lunAccentColor = (window.localStorage && localStorage.getItem("spkmod-accent-color")) || "#ffd54a";
 var lunHudBackground = (window.localStorage && localStorage.getItem("spkmod-hud-bg")) || "none";
 var lunChromaKeyColor = (window.localStorage && localStorage.getItem("spkmod-chroma-key")) || "none";
+var lunChromaFloorShape = (window.localStorage && localStorage.getItem("spkmod-chroma-floor-shape")) || "off";
+var lunChromaFloorScale = parseFloat((window.localStorage && localStorage.getItem("spkmod-chroma-floor-scale")) || "1.0") || 1.0;
 var lunHideAllOtherPlayers = (window.localStorage && localStorage.getItem("spkmod-hide-all-players") === "true") || false;
 var lunLockedFacialExpression = (window.localStorage && localStorage.getItem("spkmod-locked-facial-expression")) || "none";
 try { if (typeof window !== "undefined" && window.localStorage) localStorage.removeItem("spkmod-local-skin"); } catch (_) {}
@@ -3799,6 +3801,9 @@ function applyChromaKeyColor(colorKey, allowToggle = false, silent = false) {
 		chatLog("Chroma Skybox: " + (lunChromaKeyColor === "none" ? "OFF (DEFAULT)" : lunChromaKeyColor.toUpperCase()));
 	}
 	const scene = gameState?.scene;
+	if (typeof applyChromaFloorPad === "function" && lunChromaFloorShape !== "off") {
+		applyChromaFloorPad(undefined, undefined, true);
+	}
 	if (!scene) return;
 
 	const hex = LUN_CHROMA_COLORS[lunChromaKeyColor];
@@ -3905,9 +3910,100 @@ function applyChromaKeyColor(colorKey, allowToggle = false, silent = false) {
 	}
 }
 
+function applyChromaFloorPad(shape, scale, silent = false) {
+	if (shape !== undefined && shape !== null) {
+		lunChromaFloorShape = shape;
+		if (window.localStorage) localStorage.setItem("spkmod-chroma-floor-shape", lunChromaFloorShape);
+	}
+	if (scale !== undefined && scale !== null) {
+		lunChromaFloorScale = parseFloat(scale) || 1.0;
+		if (window.localStorage) localStorage.setItem("spkmod-chroma-floor-scale", String(lunChromaFloorScale));
+	}
+
+	const playerContainer = gameState?.playerContainer;
+	if (!playerContainer) return;
+
+	let mesh = playerContainer.getObjectByName("spkmod_chroma_floor_pad");
+
+	if (lunChromaFloorShape === "off") {
+		if (mesh) mesh.visible = false;
+		return;
+	}
+
+	const THREE = window.THREE;
+	if (!THREE) {
+		if (typeof spkmodEnsureThree === "function") {
+			spkmodEnsureThree().then(() => applyChromaFloorPad(undefined, undefined, silent));
+		}
+		return;
+	}
+
+	const hex = (typeof LUN_CHROMA_COLORS !== "undefined" && typeof lunChromaKeyColor !== "undefined" && LUN_CHROMA_COLORS[lunChromaKeyColor] !== undefined)
+		? LUN_CHROMA_COLORS[lunChromaKeyColor]
+		: 0x00ff00;
+
+	function buildGeometry(sName, sc) {
+		const s = sc;
+		switch (sName) {
+			case "full":
+				return new THREE.PlaneGeometry(120 * s, 120 * s);
+			case "square":
+				return new THREE.PlaneGeometry(2.5 * s, 2.5 * s);
+			case "wide":
+				return new THREE.PlaneGeometry(4.5 * s, 2.5 * s);
+			case "short":
+				return new THREE.PlaneGeometry(2.5 * s, 1.4 * s);
+			case "circle":
+				return new THREE.CircleGeometry(1.6 * s, 48);
+			case "star": {
+				const shapePath = new THREE.Shape();
+				const points = 5;
+				const outerR = 2.0 * s;
+				const innerR = 0.85 * s;
+				for (let i = 0; i < points * 2; i++) {
+					const r = (i % 2 === 0) ? outerR : innerR;
+					const a = (i / (points * 2)) * Math.PI * 2 - Math.PI / 2;
+					const x = Math.cos(a) * r;
+					const y = Math.sin(a) * r;
+					if (i === 0) shapePath.moveTo(x, y);
+					else shapePath.lineTo(x, y);
+				}
+				shapePath.closePath();
+				return new THREE.ShapeGeometry(shapePath);
+			}
+			default:
+				return new THREE.PlaneGeometry(2.5 * s, 2.5 * s);
+		}
+	}
+
+	if (!mesh) {
+		const mat = new THREE.MeshBasicMaterial({
+			color: hex,
+			side: THREE.DoubleSide,
+			depthWrite: true
+		});
+		mesh = new THREE.Mesh(buildGeometry(lunChromaFloorShape, lunChromaFloorScale), mat);
+		mesh.name = "spkmod_chroma_floor_pad";
+		mesh.rotation.x = -Math.PI / 2;
+		mesh.position.set(0, 0.02, 0);
+		playerContainer.add(mesh);
+	} else {
+		mesh.visible = true;
+		if (mesh.geometry) mesh.geometry.dispose();
+		mesh.geometry = buildGeometry(lunChromaFloorShape, lunChromaFloorScale);
+		if (mesh.material && typeof mesh.material.color?.setHex === "function") {
+			mesh.material.color.setHex(hex);
+		}
+	}
+}
+
 function maintainChromaKeyColor() {
-	if (!lunChromaKeyColor || lunChromaKeyColor === "none") return;
-	applyChromaKeyColor(lunChromaKeyColor, false, true);
+	if (lunChromaKeyColor && lunChromaKeyColor !== "none") {
+		applyChromaKeyColor(lunChromaKeyColor, false, true);
+	}
+	if (lunChromaFloorShape && lunChromaFloorShape !== "off") {
+		applyChromaFloorPad(undefined, undefined, true);
+	}
 }
 
 function setHideAllOtherPlayers(enabled) {
@@ -9068,7 +9164,9 @@ const SPKMOD_DEFAULT_GAMEPAD_CONFIG = {
 	invertCameraY: false,
 	bindings: {
 		0: "potion",            // A / Cross (Heal / Potion)
-		2: "jump",              // X / Square (Jump / Portal)
+		1: "interact",          // B / Circle (Interact / Portal - F key)
+		2: "jump",              // X / Square (Jump)
+		3: "hobagiCar",         // Y / Triangle (Hobagi Car - = key)
 		5: "zoomIn",            // RB / R1 (Zoom In)
 		7: "zoomOut",           // RT / R2 (Zoom Out)
 		8: "town",              // Back / View / Select (Back to Town)
@@ -9083,7 +9181,7 @@ const SPKMOD_DEFAULT_GAMEPAD_CONFIG = {
 };
 
 const SPKMOD_GAMEPAD_ACTIONS = [
-	"jump", "potion",
+	"jump", "interact", "hobagiCar", "potion",
 	"beyblade", "reversebeyblade", "dance", "chowayo", "hearts", "town",
 	"zoomIn", "zoomOut", "lockCamera", "autoJump", "toggleSettings"
 ];
@@ -9099,7 +9197,13 @@ let spkmodGamepadConfig = (() => {
 		const raw = localStorage.getItem(SPKMOD_GAMEPAD_CONFIG_KEY);
 		if (raw) {
 			const parsed = JSON.parse(raw);
-			if (parsed.version === 3) {
+			if (parsed.version === 4) {
+				return Object.assign({}, SPKMOD_DEFAULT_GAMEPAD_CONFIG, parsed);
+			} else if (parsed.version === 3) {
+				parsed.version = 4;
+				parsed.bindings = parsed.bindings || {};
+				if (!parsed.bindings[1]) parsed.bindings[1] = "interact";
+				if (!parsed.bindings[3]) parsed.bindings[3] = "hobagiCar";
 				return Object.assign({}, SPKMOD_DEFAULT_GAMEPAD_CONFIG, parsed);
 			}
 		}
@@ -9121,7 +9225,17 @@ function executeGamepadAction(actionName) {
 	switch (actionName) {
 		case "jump":
 			spkmodPerformJump();
-			if (typeof gameState !== "undefined" && gameState && typeof gameState.tryUsePortal === "function") gameState.tryUsePortal();
+			break;
+		case "interact":
+			if (typeof gameState !== "undefined" && gameState && typeof gameState.tryUsePortal === "function") {
+				gameState.tryUsePortal();
+			}
+			window.dispatchEvent(new KeyboardEvent("keydown", { key: "f", code: "KeyF", keyCode: 70, which: 70, bubbles: true }));
+			window.dispatchEvent(new KeyboardEvent("keyup", { key: "f", code: "KeyF", keyCode: 70, bubbles: true }));
+			break;
+		case "hobagiCar":
+			window.dispatchEvent(new KeyboardEvent("keydown", { key: "=", code: "Equal", keyCode: 187, which: 187, bubbles: true }));
+			window.dispatchEvent(new KeyboardEvent("keyup", { key: "=", code: "Equal", keyCode: 187, bubbles: true }));
 			break;
 
 
@@ -12896,6 +13010,7 @@ function updateLocalEditsUI() {
 	if (lunPanelElements.editsModalTitle) setText(lunPanelElements.editsModalTitle, t("localEditsTitle") || "🎨 Local Edits (Creator Mode)");
 	if (lunPanelElements.localEditsBtn) setText(lunPanelElements.localEditsBtn, t("localEditsBtn") || "🎨 Local Edits");
 	if (editsModalElements.chromaHeader) setText(editsModalElements.chromaHeader, "🎬 " + (t("chromaKeyHeader") || "Chroma Key Skybox (Background)"));
+	if (editsModalElements.chromaFloorHeader) setText(editsModalElements.chromaFloorHeader, "🟩 " + (t("chromaFloorHeader") || "Chroma Floor Pad (Stage)"));
 	if (editsModalElements.solitudeHeader) setText(editsModalElements.solitudeHeader, "👤 " + (t("solitudeHeader") || "Solitude (Alone Mode)"));
 	if (editsModalElements.facialHeader) setText(editsModalElements.facialHeader, "😊 " + (t("facialExpressionHeader") || "Character Facial Expression"));
 	if (editsModalElements.cameraHeader) setText(editsModalElements.cameraHeader, "📷 " + (t("cameraEffectsTitle") || "Camera Filters (Hotkeys)"));
@@ -12960,6 +13075,46 @@ function updateLocalEditsUI() {
 			}
 		}
 	}
+
+	// Chroma Floor Pad Buttons
+	if (editsModalElements.chromaFloorBtnOff) setText(editsModalElements.chromaFloorBtnOff, t("chromaFloorOff") || "Off");
+	if (editsModalElements.chromaFloorBtnFull) setText(editsModalElements.chromaFloorBtnFull, t("chromaFloorFull") || "Full Floor");
+	if (editsModalElements.chromaFloorBtnSquare) setText(editsModalElements.chromaFloorBtnSquare, t("chromaFloorSquare") || "Square");
+	if (editsModalElements.chromaFloorBtnWide) setText(editsModalElements.chromaFloorBtnWide, t("chromaFloorWide") || "Wide");
+	if (editsModalElements.chromaFloorBtnShort) setText(editsModalElements.chromaFloorBtnShort, t("chromaFloorShort") || "Short");
+	if (editsModalElements.chromaFloorBtnCircle) setText(editsModalElements.chromaFloorBtnCircle, t("chromaFloorCircle") || "Circle");
+	if (editsModalElements.chromaFloorBtnStar) setText(editsModalElements.chromaFloorBtnStar, "★ " + (t("chromaFloorStar") || "Star"));
+	if (editsModalElements.chromaFloorScaleLabel) setText(editsModalElements.chromaFloorScaleLabel, (t("chromaFloorScale") || "Size") + ":");
+
+	const floorShapeBtns = {
+		off: editsModalElements.chromaFloorBtnOff,
+		full: editsModalElements.chromaFloorBtnFull,
+		square: editsModalElements.chromaFloorBtnSquare,
+		wide: editsModalElements.chromaFloorBtnWide,
+		short: editsModalElements.chromaFloorBtnShort,
+		circle: editsModalElements.chromaFloorBtnCircle,
+		star: editsModalElements.chromaFloorBtnStar
+	};
+	for (const [key, btn] of Object.entries(floorShapeBtns)) {
+		if (btn) {
+			const active = (lunChromaFloorShape === key);
+			btn.style.borderColor = active ? "var(--spkmod-accent, #ffd54a)" : "#555";
+			btn.style.background = active ? "rgba(255, 255, 255, 0.2)" : "";
+			btn.style.boxShadow = active ? "0 0 8px var(--spkmod-accent, #ffd54a)" : "none";
+			btn.style.fontWeight = active ? "bold" : "normal";
+		}
+	}
+
+	[0.75, 1.0, 1.5, 2.0, 3.0].forEach(sc => {
+		const btn = editsModalElements["chromaFloorScaleBtn_" + String(sc).replace(".", "_")];
+		if (btn) {
+			const active = (Math.abs(lunChromaFloorScale - sc) < 0.05);
+			btn.style.borderColor = active ? "var(--spkmod-accent, #ffd54a)" : "#555";
+			btn.style.background = active ? "rgba(255, 255, 255, 0.2)" : "";
+			btn.style.boxShadow = active ? "0 0 8px var(--spkmod-accent, #ffd54a)" : "none";
+			btn.style.fontWeight = active ? "bold" : "normal";
+		}
+	});
 
 	// Solitude Toggle Button
 	if (editsModalElements.solitudeToggleBtn) {
@@ -13501,6 +13656,74 @@ document.body.appendChild(
 						style: "padding: 5px 2px; font-size: 9.5px; text-align: center; color: #d97706;",
 						innerText: "☕ " + (t("skyColorSepia") || "Warm Sepia"),
 						onclick: () => { applyChromaKeyColor("sepia", true); updateLocalEditsUI(); }
+					})
+				])
+			]),
+
+			// Section 1.5: Chroma Floor Pad
+			buildElement("div", { style: "display: flex; flex-direction: column; gap: 4px; border-bottom: 1px solid #555; padding-bottom: 8px;" }, [
+				editsModalElements.chromaFloorHeader = buildElement("div", {
+					className: "spkmod-panel-cat-header",
+					innerText: "🟩 " + (t("chromaFloorHeader") || "Chroma Floor Pad (Stage)"),
+					style: "margin-top: 0px;"
+				}),
+				buildElement("div", { style: "display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px;" }, [
+					editsModalElements.chromaFloorBtnOff = buildElement("button", {
+						className: "spkmod-panel-btn",
+						style: "padding: 5px 2px; font-size: 9.5px; text-align: center;",
+						innerText: t("chromaFloorOff") || "Off",
+						onclick: () => { applyChromaFloorPad("off", null); updateLocalEditsUI(); }
+					}),
+					editsModalElements.chromaFloorBtnFull = buildElement("button", {
+						className: "spkmod-panel-btn",
+						style: "padding: 5px 2px; font-size: 9.5px; text-align: center; color: #4ade80;",
+						innerText: t("chromaFloorFull") || "Full Floor",
+						onclick: () => { applyChromaFloorPad("full", null); updateLocalEditsUI(); }
+					}),
+					editsModalElements.chromaFloorBtnSquare = buildElement("button", {
+						className: "spkmod-panel-btn",
+						style: "padding: 5px 2px; font-size: 9.5px; text-align: center;",
+						innerText: t("chromaFloorSquare") || "Square",
+						onclick: () => { applyChromaFloorPad("square", null); updateLocalEditsUI(); }
+					}),
+					editsModalElements.chromaFloorBtnWide = buildElement("button", {
+						className: "spkmod-panel-btn",
+						style: "padding: 5px 2px; font-size: 9.5px; text-align: center;",
+						innerText: t("chromaFloorWide") || "Wide",
+						onclick: () => { applyChromaFloorPad("wide", null); updateLocalEditsUI(); }
+					}),
+					editsModalElements.chromaFloorBtnShort = buildElement("button", {
+						className: "spkmod-panel-btn",
+						style: "padding: 5px 2px; font-size: 9.5px; text-align: center;",
+						innerText: t("chromaFloorShort") || "Short",
+						onclick: () => { applyChromaFloorPad("short", null); updateLocalEditsUI(); }
+					}),
+					editsModalElements.chromaFloorBtnCircle = buildElement("button", {
+						className: "spkmod-panel-btn",
+						style: "padding: 5px 2px; font-size: 9.5px; text-align: center;",
+						innerText: t("chromaFloorCircle") || "Circle",
+						onclick: () => { applyChromaFloorPad("circle", null); updateLocalEditsUI(); }
+					}),
+					editsModalElements.chromaFloorBtnStar = buildElement("button", {
+						className: "spkmod-panel-btn",
+						style: "padding: 5px 2px; font-size: 9.5px; text-align: center; color: #ffd54a;",
+						innerText: "★ " + (t("chromaFloorStar") || "Star"),
+						onclick: () => { applyChromaFloorPad("star", null); updateLocalEditsUI(); }
+					})
+				]),
+				buildElement("div", { style: "display: flex; gap: 4px; align-items: center; margin-top: 2px;" }, [
+					editsModalElements.chromaFloorScaleLabel = buildElement("span", {
+						style: "font-size: 10px; color: #aaa; flex-shrink: 0; margin-right: 2px;",
+						innerText: (t("chromaFloorScale") || "Size") + ":"
+					}),
+					...[0.75, 1.0, 1.5, 2.0, 3.0].map(sc => {
+						const key = "chromaFloorScaleBtn_" + String(sc).replace(".", "_");
+						return editsModalElements[key] = buildElement("button", {
+							className: "spkmod-panel-btn",
+							style: "padding: 3px 5px; font-size: 9.5px; flex: 1; text-align: center;",
+							innerText: sc + "x",
+							onclick: () => { applyChromaFloorPad(null, sc); updateLocalEditsUI(); }
+						});
 					})
 				])
 			]),
@@ -17653,10 +17876,26 @@ function hookQuestManagerOnce() {
 			const hkHandleClaim = qmProto.handleClaim;
 			qmProto.handleClaim = async function (quest, btn) {
 				const res = await hkHandleClaim.apply(this, arguments);
-				if (quest && quest.questId && lunPinnedQuestId && String(lunPinnedQuestId) === String(quest.questId)) {
-					unpinQuest();
+				
+				if (quest && quest.questId) {
+					const cached = window.__spkmodCachedQuests;
+					if (cached && cached[quest.questId]) {
+						cached[quest.questId].isClaimed = true;
+						cached[quest.questId].isCompleted = true;
+					}
+					
+					if (isChecklistPinned(quest.questId)) {
+						toggleChecklistPin(quest.questId);
+					}
+					
+					if (lunPinnedQuestId && String(lunPinnedQuestId) === String(quest.questId)) {
+						unpinQuest();
+					}
 				}
-				if (typeof renderQuestChecklist === "function") renderQuestChecklist();
+				
+				if (typeof renderQuestChecklist === "function")
+					renderQuestChecklist();
+				
 				return res;
 			};
 		}
@@ -18479,7 +18718,7 @@ function injectPinButtonsIntoQuestList() {
 			starBtn.title = isStarred ? (t("unstarQuestBtn") || "Unstar from HUD") : (t("starQuestBtn") || "Star on HUD");
 			starBtn.style.cssText = `
 				flex-shrink: 0;
-				margin-left: 6px;
+				margin-left: 0;
 				padding: 3px 6px;
 				font-size: 11px;
 				line-height: 1.2;
@@ -18511,7 +18750,7 @@ function injectPinButtonsIntoQuestList() {
 			pinBtn.title = isInList ? (t("unpinChecklistBtn") || "Unpin from List") : (t("pinChecklistBtn") || "Pin to List");
 			pinBtn.style.cssText = `
 				flex-shrink: 0;
-				margin-left: 4px;
+				margin-left: 0;
 				padding: 3px 6px;
 				font-size: 11px;
 				line-height: 1.2;
@@ -18538,18 +18777,22 @@ function injectPinButtonsIntoQuestList() {
 				}
 			};
 
+			const subRow = document.createElement("div");
+			subRow.className = "spkmod-quest-subrow";
+			subRow.style.cssText = "display: flex; gap: 4px; align-items: center;";
+			subRow.appendChild(starBtn);
+			subRow.appendChild(pinBtn);
+
 			const statusEl = topRow.querySelector(".sr-list-item__subtitle") || topRow.querySelector("button.sr-btn--primary");
 			if (statusEl && statusEl.parentElement === topRow) {
 				const rightCol = document.createElement("div");
 				rightCol.className = "spkmod-quest-actions-col";
-				rightCol.style.cssText = "display: inline-flex; align-items: center; gap: 4px; flex-shrink: 0; margin-left: 8px;";
+				rightCol.style.cssText = "display: flex; flex-direction: column; align-items: flex-end; justify-content: center; gap: 4px; flex-shrink: 0; margin-left: 8px;";
 				topRow.replaceChild(rightCol, statusEl);
 				rightCol.appendChild(statusEl);
-				rightCol.appendChild(starBtn);
-				rightCol.appendChild(pinBtn);
+				rightCol.appendChild(subRow);
 			} else if (!topRow.querySelector(".spkmod-star-button")) {
-				topRow.appendChild(starBtn);
-				topRow.appendChild(pinBtn);
+				topRow.appendChild(subRow);
 			}
     });
 }
@@ -19270,7 +19513,7 @@ function hookAvatarLabel(entity) {
 	hookKnownBotHeartEmotes();
 	hookKnownBotPlayerEmotesForAll();
 	if (typeof hookBlockedUserVoice === "function") hookBlockedUserVoice();
-	if (typeof lunChromaKeyColor !== "undefined" && lunChromaKeyColor !== "none" && typeof maintainChromaKeyColor === "function") {
+	if (((typeof lunChromaKeyColor !== "undefined" && lunChromaKeyColor !== "none") || (typeof lunChromaFloorShape !== "undefined" && lunChromaFloorShape !== "off")) && typeof maintainChromaKeyColor === "function") {
 		if (lunTickCount % 20 === 0) {
 			maintainChromaKeyColor();
 		}
@@ -20411,6 +20654,7 @@ function getClientBuildVersion() {
 }
 
 let speakiNewsChecked = false;
+window.speakiNewsChecked = false;
 
 function showNewsModal(remoteVer, htmlBody, stylesHtml = "") {
 	let backdrop = document.getElementById("spkmod-news-modal");
@@ -20580,30 +20824,48 @@ function showNewsModal(remoteVer, htmlBody, stylesHtml = "") {
 	document.body.appendChild(backdrop);
 }
 
-async function checkAndShowNewsPopup() {
-	if (speakiNewsChecked) return;
+async function checkAndShowNewsPopup(force = false) {
+	if (typeof window !== "undefined" && typeof window.speakiNewsChecked !== "undefined") {
+		speakiNewsChecked = Boolean(window.speakiNewsChecked);
+	}
+	if (speakiNewsChecked && !force) return;
 	const clientVer = getClientBuildVersion();
-	if (!clientVer) return;
+	if (!clientVer && !force) return;
 	speakiNewsChecked = true;
+	if (typeof window !== "undefined") window.speakiNewsChecked = true;
 
 	try {
 		const res = await fetch(`https://raw.githubusercontent.com/DJTOMATO/SpeakiRPG/refs/heads/main/news.html?_t=${Date.now()}`, {
 			cache: "no-store"
 		});
-		if (!res.ok) return;
+		if (!res.ok) {
+			console.warn("[SpeakiMod+] News fetch HTTP error:", res.status);
+			return;
+		}
 		const htmlText = await res.text();
 		const parser = new DOMParser();
 		const doc = parser.parseFromString(htmlText, "text/html");
 		const metaEl = doc.querySelector('meta[name="min-build-version"]');
 		const remoteVer = metaEl ? metaEl.getAttribute("content") : null;
-		if (!remoteVer) return;
+		if (!remoteVer) {
+			console.warn("[SpeakiMod+] News meta min-build-version not found in remote news.html");
+			return;
+		}
 
-		try {
-			const dismissedVer = localStorage.getItem("spkmod-dismissed-news-version");
-			if (dismissedVer && dismissedVer === remoteVer) return;
-		} catch (_) {}
+		if (!force) {
+			try {
+				const dismissedVer = localStorage.getItem("spkmod-dismissed-news-version");
+				if (dismissedVer && dismissedVer === remoteVer) {
+					console.log(`[SpeakiMod+] News for version ${remoteVer} was already dismissed.`);
+					return;
+				}
+			} catch (_) {}
 
-		if (!isNewerVersion(remoteVer, clientVer)) return;
+			if (!isNewerVersion(remoteVer, clientVer)) {
+				console.log(`[SpeakiMod+] Client version (${clientVer}) is up to date with remote (${remoteVer}). No popup needed.`);
+				return;
+			}
+		}
 
 		const styleEl = doc.head ? doc.head.querySelector("style") : null;
 		const stylesHtml = styleEl ? styleEl.outerHTML : "";
@@ -20613,6 +20875,8 @@ async function checkAndShowNewsPopup() {
 		console.warn("[SpeakiMod+] Failed to check news/update:", e);
 	}
 }
+window.checkAndShowNewsPopup = checkAndShowNewsPopup;
+window.showNewsModal = showNewsModal;
 
 setTimeout(() => {
 	if (typeof gameState !== "undefined" && gameState) {
@@ -21844,3 +22108,5 @@ setTimeout(() => {
 		if (typeof updateDynamicStyles === "function") updateDynamicStyles();
 	}
 }, 1000);
+
+
