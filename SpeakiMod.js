@@ -17784,137 +17784,6 @@ function pinQuest(quest, questElm) {
 	} catch (_) {}
 })();
 
-let questManagerHooked = false;
-function hookQuestManagerOnce() {
-	if (questManagerHooked) return true;
-	if (typeof window.questManager !== "undefined" && window.questManager && window.questManager.prototype) {
-		questManagerHooked = true;
-		const qmProto = window.questManager.prototype;
-
-		// 1. Hook renderRow to non-destructively attach Pin button
-		if (typeof qmProto.renderRow === "function") {
-			const hkRenderRow = qmProto.renderRow;
-			qmProto.renderRow = function (quest) {
-				const questElm = hkRenderRow.apply(this, [quest]);
-				try {
-					if (!quest.isClaimed) {
-						const topRow = questElm.firstElementChild || questElm;
-						const isPinned = (lunPinnedQuestId && String(lunPinnedQuestId) === String(quest.questId));
-						const pinBtn = document.createElement("button");
-						pinBtn.type = "button";
-						pinBtn.className = "spkmod-pq-button";
-						pinBtn.__questId = quest.questId;
-						pinBtn.innerText = isPinned ? ("✕ " + (t("unpinQuestBtn") !== "unpinQuestBtn" ? t("unpinQuestBtn") : "Unpin")) : ("📌 " + (t("pinQuestBtn") || "Pin"));
-						pinBtn.style.cssText = `
-							flex-shrink: 0;
-							margin-left: 8px;
-							padding: 3px 8px;
-							font-size: 12px;
-							line-height: 1.2;
-							height: auto;
-							border-radius: 4px;
-							cursor: pointer;
-							background: ${isPinned ? "#dc2626" : "#2563eb"};
-							color: #fff;
-							border: 1px solid rgba(255,255,255,0.2);
-							font-weight: bold;
-							user-select: none;
-							transition: background 0.15s ease;
-						`;
-						pinBtn.onclick = function (e) {
-							e.stopPropagation();
-							pinQuest(quest, questElm);
-						};
-
-						// Safely group with the right-side element (In progress or Claim)
-						const statusEl = topRow.children && topRow.children[1];
-						if (statusEl) {
-							const rightCol = document.createElement("div");
-							rightCol.style.cssText = "display: inline-flex; align-items: center; gap: 8px; flex-shrink: 0; margin-left: 8px;";
-							topRow.replaceChild(rightCol, statusEl);
-							rightCol.appendChild(statusEl);
-							rightCol.appendChild(pinBtn);
-						} else {
-							topRow.appendChild(pinBtn);
-						}
-					}
-				} catch (err) {
-					console.warn("[SpeakiMod+] Error attaching pin button to quest row:", err);
-				}
-				return questElm;
-			};
-		}
-
-		// 2. Hook applyProgress for instant zero-latency WebSocket quest progress updates
-		if (typeof qmProto.applyProgress === "function") {
-			const hkApplyProgress = qmProto.applyProgress;
-			qmProto.applyProgress = function (e) {
-				try {
-					if (e && Array.isArray(e.quests)) {
-						for (const n of e.quests) {
-							if (window.__spkmodCachedQuests && window.__spkmodCachedQuests[n.questId]) {
-								const cached = window.__spkmodCachedQuests[n.questId];
-								if (n.currentAmount !== undefined) cached.currentAmount = n.currentAmount;
-								if (n.targetAmount !== undefined) cached.targetAmount = n.targetAmount;
-								if (cached.currentAmount >= cached.targetAmount) cached.isCompleted = true;
-							}
-							if (typeof updateQuestChecklistProgress === "function") {
-								updateQuestChecklistProgress(n.questId, n.currentAmount, n.targetAmount);
-							}
-							if (lunPinnedQuestId && String(n.questId) === String(lunPinnedQuestId)) {
-								const cur = n.currentAmount ?? 0;
-								const tgt = n.targetAmount ?? 1;
-								if (lunHudElements && lunHudElements.pinnedQuest && lunHudElements.pinnedQuest.content) {
-									const regex = /\d+\s*\/\s*\d+$/;
-									if (regex.test(lunPinnedQuestContent || "")) {
-										lunPinnedQuestContent = lunPinnedQuestContent.replace(regex, `${cur}/${tgt}`);
-										setText(lunHudElements.pinnedQuest.content, lunPinnedQuestContent);
-									} else {
-										updatePinnedQuestDisplay({ questId: n.questId, currentAmount: cur, targetAmount: tgt });
-									}
-								}
-								if (lunHudElements && lunHudElements.pinnedQuest && lunHudElements.pinnedQuest.pbar) {
-									const pct = Math.min(100, Math.max(0, (cur / tgt) * 100));
-									lunHudElements.pinnedQuest.pbar.style.width = `${pct.toFixed(0)}%`;
-								}
-							}
-						}
-					}
-				} catch (err) {
-					console.warn("[SpeakiMod+] Error in quest progress hook:", err);
-				}
-				return hkApplyProgress.apply(this, arguments);
-			};
-		}
-
-		// 3. Hook handleClaim so claiming the pinned quest unpins immediately
-		if (typeof qmProto.handleClaim === "function") {
-			const hkHandleClaim = qmProto.handleClaim;
-			qmProto.handleClaim = async function (quest, btn) {
-				const res = await hkHandleClaim.apply(this, arguments);
-				if (quest && quest.questId && lunPinnedQuestId && String(lunPinnedQuestId) === String(quest.questId)) {
-					unpinQuest();
-				}
-				if (typeof renderQuestChecklist === "function") renderQuestChecklist();
-				return res;
-			};
-		}
-
-		console.log("[SpeakiMod+] Successfully hooked questManager.");
-		return true;
-	}
-	return false;
-}
-
-// Background poller until questManager is ready
-if (!questManagerHooked) {
-	const _qmPollInterval = setInterval(() => {
-		if (hookQuestManagerOnce()) {
-			clearInterval(_qmPollInterval);
-		}
-	}, 500);
-}
-
 let _fetchingQuests = false;
 async function fetchAllQuests() {
 	if (_fetchingQuests) return;
@@ -18963,11 +18832,7 @@ function tick() {
 			hookGameStateOnce();
 		}
 	}
-	if (!questManagerHooked && typeof window.questManager !== "undefined" && window.questManager) {
-		if (typeof hookQuestManagerOnce === "function") {
-			hookQuestManagerOnce();
-		}
-	}
+
 	if (typeof __spkmodSpriteProtoHooked !== "undefined" && !__spkmodSpriteProtoHooked && gameState?.playerContainer?.traverse) {
 		gameState.playerContainer.traverse(obj => {
 			if (obj && obj.isSprite && typeof hookSpritePrototypeOnce === "function") {
@@ -21921,9 +21786,6 @@ function onInGameReady() {
 	}
 	if (typeof hookRemotePlayersOnce === "function") {
 		hookRemotePlayersOnce();
-	}
-	if (typeof hookQuestManagerOnce === "function") {
-		hookQuestManagerOnce();
 	}
 	if (typeof fetchAllQuests === "function") {
 		fetchAllQuests();
