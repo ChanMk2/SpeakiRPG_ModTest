@@ -17876,26 +17876,10 @@ function hookQuestManagerOnce() {
 			const hkHandleClaim = qmProto.handleClaim;
 			qmProto.handleClaim = async function (quest, btn) {
 				const res = await hkHandleClaim.apply(this, arguments);
-				
-				if (quest && quest.questId) {
-					const cached = window.__spkmodCachedQuests;
-					if (cached && cached[quest.questId]) {
-						cached[quest.questId].isClaimed = true;
-						cached[quest.questId].isCompleted = true;
-					}
-					
-					if (isChecklistPinned(quest.questId)) {
-						toggleChecklistPin(quest.questId);
-					}
-					
-					if (lunPinnedQuestId && String(lunPinnedQuestId) === String(quest.questId)) {
-						unpinQuest();
-					}
+				if (quest && quest.questId && lunPinnedQuestId && String(lunPinnedQuestId) === String(quest.questId)) {
+					unpinQuest();
 				}
-				
-				if (typeof renderQuestChecklist === "function")
-					renderQuestChecklist();
-				
+				if (typeof renderQuestChecklist === "function") renderQuestChecklist();
 				return res;
 			};
 		}
@@ -17944,6 +17928,12 @@ async function fetchAllQuests() {
 							if (q && q.questId) {
 								q.period = q.period || p;
 								window.__spkmodCachedQuests[q.questId] = q;
+								if (q.isClaimed) {
+									const pins = getChecklistPinnedIds();
+									if (pins.some(id => String(id) === String(q.questId))) {
+										setChecklistPinnedIds(pins.filter(id => String(id) !== String(q.questId)));
+									}
+								}
 								if (lunPinnedQuestId && String(lunPinnedQuestId) === String(q.questId)) {
 									updatePinnedQuestDisplay(q);
 								}
