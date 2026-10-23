@@ -123,7 +123,7 @@ if (!window.__speakiFetchHooked) {
 		const res = await origFetch.apply(this, args);
 		try {
 			const url = typeof resource === "string" ? resource : (resource?.url || "");
-			// Detect a successful quest reward claim from the game UI.
+			// Detect a successful quest reward claim
 			const method = String(config?.method || resource?.method || "GET").toUpperCase();			
 			const claimMatch = url.match(/\/api\/quests\/([^/?#]+)\/claim(?:[/?#]|$)/i);
 			if (method === "POST" && res.ok && claimMatch) {
@@ -18108,9 +18108,6 @@ async function claimQuest(questId) {
 			if (window.__spkmodCachedQuests && window.__spkmodCachedQuests[questId]) {
 				window.__spkmodCachedQuests[questId].isClaimed = true;
 				window.__spkmodCachedQuests[questId].isCompleted = true;
-			}
-			if (lunPinnedQuestId && String(lunPinnedQuestId) === String(questId)) {
-				unpinQuest();
 			}
 			if (typeof renderQuestChecklist === "function") renderQuestChecklist();
 			if (typeof refreshPinButtons === "function") refreshPinButtons();
