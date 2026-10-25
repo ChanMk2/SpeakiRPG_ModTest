@@ -20374,85 +20374,6 @@ if (hudWindow) {
 	makeDraggable(hudWindow, [hudWindow, mainCard, headerRow, headerBtn, dragHandle, footerHandle].filter(Boolean));
 }
 
-let lunGameDrawSeen = false;
-let lunGameCanvas = null;
-
-function lunFindGameCanvas() {
-    const rendererCanvas = window.gameState?.renderer?.domElement;
-
-    if (rendererCanvas instanceof HTMLCanvasElement) {
-        return rendererCanvas;
-    }
-
-    const candidates = [...document.querySelectorAll("canvas")]
-        .map(canvas => ({
-            canvas,
-            rect: canvas.getBoundingClientRect(),
-            style: getComputedStyle(canvas)
-        }))
-        .filter(({ canvas, rect, style }) =>
-            canvas.width > 0 &&
-            canvas.height > 0 &&
-            rect.width > 0 &&
-            rect.height > 0 &&
-            style.display !== "none" &&
-            style.visibility !== "hidden"
-        )
-        .sort((a, b) =>
-            (b.rect.width * b.rect.height) -
-            (a.rect.width * a.rect.height)
-        );
-
-    return candidates[0]?.canvas ?? null;
-}
-
-function lunInstallWebGLDrawCounter() {
-    const drawMethods = [
-        "drawArrays",
-        "drawElements",
-        "drawRangeElements",
-        "drawArraysInstanced",
-        "drawElementsInstanced"
-    ];
-
-    const prototypes = [
-        window.WebGLRenderingContext?.prototype,
-        window.WebGL2RenderingContext?.prototype
-    ].filter(Boolean);
-
-    for (const proto of prototypes) {
-        for (const methodName of drawMethods) {
-            const original = proto[methodName];
-
-            if (typeof original !== "function" || original.__spkmodFpsWrapped) {
-                continue;
-            }
-
-            const wrapped = function (...args) {
-                if (!lunGameCanvas || !lunGameCanvas.isConnected) {
-                    lunGameCanvas = lunFindGameCanvas();
-                }
-
-                if (this.canvas === lunGameCanvas) {
-                    lunGameDrawSeen = true;
-                }
-
-                return Reflect.apply(original, this, args);
-            };
-
-            Object.defineProperty(wrapped, "__spkmodFpsWrapped", {value: true});
-
-            try {
-                proto[methodName] = wrapped;
-            } catch (error) {
-                console.warn("[SpeakiMod+] Could not hook WebGL.${methodName}", error);
-            }
-        }
-    }
-}
-
-lunInstallWebGLDrawCounter();
-
 let lunLastFrameTime = performance.now();
 let lunFrameCount = 0;
 lunCurrentFps = 0;
@@ -20536,18 +20457,79 @@ async function performActivePing() {
 	}
 }
 
-function fpsLoop() {
-	const now = performance.now();
-	
-	if (lunGameDrawSeen) {
-		lunFrameCount++;
-		lunGameDrawSeen = false;
-	}
-	
-	const elapsed = now - lunLastFrameTime;
+let lunRenderFramesTotal = 0;
+let lunRenderHookError = null;
+const lunFpsHookedRenderers = new WeakSet();
 
-	if (elapsed >= 1000) {
-		lunCurrentFps = Math.round(lunFrameCount * 1000 / elapsed);
+function lunInstallGameRenderHook() {
+    const renderer = window.gameState?.renderer;
+
+    if (!renderer || typeof renderer.render !== "function") {
+        return false;
+    }
+
+    if (lunFpsHookedRenderers.has(renderer)) {
+        return true;
+    }
+
+    const originalRender = renderer.render;
+
+    let countedInCurrentTask = false;
+
+    const wrappedRender = function (...args) {
+        if (!countedInCurrentTask) {
+            countedInCurrentTask = true;
+
+            lunFrameCount++;
+            lunRenderFramesTotal++;
+
+            queueMicrotask(() => {countedInCurrentTask = false;});
+        }
+
+        return Reflect.apply(originalRender, this, args);
+    };
+
+    try {
+        renderer.render = wrappedRender;
+
+        if (renderer.render !== wrappedRender) {
+            throw new Error("Could not replace renderer.render");
+        }
+
+        lunFpsHookedRenderers.add(renderer);
+        lunRenderHookError = null;
+
+        return true;
+    } catch (error) {
+        lunRenderHookError = String(error);
+        console.error("[SpeakiMod+] (for FPS Counter) Failed to hook renderer:", error);
+
+        return false;
+    }
+}
+
+window.__spkmodFpsDebug = function () {
+    const renderer = window.gameState?.renderer;
+
+    return {
+        rendererExists: !!renderer,
+        renderHookInstalled: !!(
+            renderer &&
+            lunFpsHookedRenderers.has(renderer)
+        ),
+        totalRenderedFrames: lunRenderFramesTotal,
+        currentFps: lunCurrentFps,
+        hookError: lunRenderHookError
+    };
+};
+
+function fpsLoop() {
+	lunInstallGameRenderHook();
+
+	const now = performance.now();
+
+	if (now - lunLastFrameTime >= 1000) {
+		lunCurrentFps = Math.round(lunFrameCount * 1000 / (now - lunLastFrameTime));
 		lunFrameCount = 0;
 		if (lunFpsPingEnabled && lunHudElements.fpsPingTracker) {
 			setText(lunHudElements.fpsPingTracker, t("fpsPingText", lunCurrentFps, lunCurrentPing));
