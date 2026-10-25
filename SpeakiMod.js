@@ -20459,7 +20459,7 @@ async function performActivePing() {
 
 let lunGameCanvasDrawSeen = false;
 
-function installGameCanvasFpsHooks() {
+(function installGameCanvasFpsHooks() {
     const methods = [
         "drawArrays",
         "drawElements",
@@ -20509,7 +20509,7 @@ function installGameCanvasFpsHooks() {
             }
         }
     }
-}
+})();
 
 function fpsLoop() {
 	const now = performance.now();
