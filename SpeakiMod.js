@@ -20457,76 +20457,66 @@ async function performActivePing() {
 	}
 }
 
-let lunRenderFramesTotal = 0;
-let lunRenderHookError = null;
-const lunFpsHookedRenderers = new WeakSet();
+let lunGameCanvasDrawSeen = false;
 
-function lunInstallGameRenderHook() {
-    const renderer = window.gameState?.renderer;
+function installGameCanvasFpsHooks() {
+    const methods = [
+        "drawArrays",
+        "drawElements",
+        "drawRangeElements",
+        "drawArraysInstanced",
+        "drawElementsInstanced"
+    ];
 
-    if (!renderer || typeof renderer.render !== "function") {
-        return false;
-    }
+    const prototypes = [
+        window.WebGLRenderingContext?.prototype,
+        window.WebGL2RenderingContext?.prototype
+    ].filter(Boolean);
 
-    if (lunFpsHookedRenderers.has(renderer)) {
-        return true;
-    }
+    for (const proto of new Set(prototypes)) {
+        for (const name of methods) {
+            const descriptor = Object.getOwnPropertyDescriptor(proto, name);
 
-    const originalRender = renderer.render;
+            if (!descriptor || typeof descriptor.value !== "function") {
+                continue;
+            }
 
-    let countedInCurrentTask = false;
+            const original = descriptor.value;
 
-    const wrappedRender = function (...args) {
-        if (!countedInCurrentTask) {
-            countedInCurrentTask = true;
+            if (original.__speakiModFpsWrapped) {
+                continue;
+            }
 
-            lunFrameCount++;
-            lunRenderFramesTotal++;
+            const wrapped = function (...args) {
+                if (this.canvas?.classList?.contains("sr-game-canvas")) {
+                    lunGameCanvasDrawSeen = true;
+                }
 
-            queueMicrotask(() => {countedInCurrentTask = false;});
+                return Reflect.apply(original, this, args);
+            };
+
+            Object.defineProperty(wrapped, "__speakiModFpsWrapped", {
+                value: true
+            });
+
+            try {
+                Object.defineProperty(proto, name, {
+                    ...descriptor,
+                    value: wrapped
+                });
+            } catch (error) {
+                console.error("[SpeakiMod+] <FPS Counter> Hook failed:", name, error);
+            }
         }
-
-        return Reflect.apply(originalRender, this, args);
-    };
-
-    try {
-        renderer.render = wrappedRender;
-
-        if (renderer.render !== wrappedRender) {
-            throw new Error("Could not replace renderer.render");
-        }
-
-        lunFpsHookedRenderers.add(renderer);
-        lunRenderHookError = null;
-
-        return true;
-    } catch (error) {
-        lunRenderHookError = String(error);
-        console.error("[SpeakiMod+] (for FPS Counter) Failed to hook renderer:", error);
-
-        return false;
     }
 }
 
-window.__spkmodFpsDebug = function () {
-    const renderer = window.gameState?.renderer;
-
-    return {
-        rendererExists: !!renderer,
-        renderHookInstalled: !!(
-            renderer &&
-            lunFpsHookedRenderers.has(renderer)
-        ),
-        totalRenderedFrames: lunRenderFramesTotal,
-        currentFps: lunCurrentFps,
-        hookError: lunRenderHookError
-    };
-};
-
 function fpsLoop() {
-	lunInstallGameRenderHook();
-
 	const now = performance.now();
+    if (lunGameCanvasDrawSeen) {
+        lunFrameCount++;
+        lunGameCanvasDrawSeen = false;
+    }
 
 	if (now - lunLastFrameTime >= 1000) {
 		lunCurrentFps = Math.round(lunFrameCount * 1000 / (now - lunLastFrameTime));
