@@ -19,7 +19,7 @@ try {
 		try { localStorage.removeItem("spkmod-resolution-override"); } catch (_) {}
 	} else {
 		const v = parseFloat(localStorage.getItem("spkmod-resolution-override"));
-		window.spkmodResolutionOverride = (v >= 1 && v <= 3) ? v : 1;
+		window.spkmodResolutionOverride = (v >= 1 && v <= 3.5) ? v : 1;
 	}
 } catch (_) {
 	window.spkmodResolutionOverride = 1;

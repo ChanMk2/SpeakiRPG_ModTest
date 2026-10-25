@@ -2357,7 +2357,7 @@ var isMobClient = typeof spkmodIsMobile === "function" ? spkmodIsMobile() : fals
 var lunResolutionOverride = 1; // 1.0 = Off (use the game's own resolution option)
 if (isMobClient && window.localStorage) {
 	const v = parseFloat(localStorage.getItem("spkmod-resolution-override"));
-	if (v >= 1 && v <= 3) lunResolutionOverride = v;
+	if (v >= 1 && v <= 3.5) lunResolutionOverride = v;
 } else if (window.localStorage) {
 	try { localStorage.removeItem("spkmod-resolution-override"); } catch (_) {}
 }
@@ -2381,7 +2381,7 @@ function setResolutionOverride(value) {
 		return;
 	}
 	const v = parseFloat(value);
-	lunResolutionOverride = (v >= 1 && v <= 3) ? v : 1;
+	lunResolutionOverride = (v >= 1 && v <= 3.5) ? v : 1;
 	window.spkmodResolutionOverride = lunResolutionOverride;
 	if (window.localStorage) localStorage.setItem("spkmod-resolution-override", String(lunResolutionOverride));
 	if (lunPanelElements.resolutionOverrideInput) {
@@ -6197,7 +6197,7 @@ document.body.appendChild(
 					lunPanelElements.resolutionOverrideInput = buildElement("input", {
 						type: "range",
 						min: "1",
-						max: "3",
+						max: "3.5",
 						step: "0.05",
 						value: lunResolutionOverride,
 						style: "width: 75px; accent-color: #38bdf8; cursor: pointer;",
