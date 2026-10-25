@@ -20457,54 +20457,64 @@ async function performActivePing() {
 	}
 }
 
-let lunGameDrawFlag = false;
-let lunAnyDrawFlag = false;
-let lunGameEverDrew = false, lunAnyEverDrew = false;
-let lunGameRendered = 0, lunAnyRendered = 0;
+const lunGlDrawState = {
+	hooked: false,
+	tickId: 0,
+	pending: [],
+	counts: new Map(),
+	everDrew: false
+};
 
-function lunInstallWebGLDrawCounter() {
-	const names = ["drawArrays", "drawElements", "drawRangeElements", "drawArraysInstanced", "drawElementsInstanced"];
-	const protos = [window.WebGLRenderingContext?.prototype, window.WebGL2RenderingContext?.prototype].filter(Boolean);
+function lunHookGlDrawCalls() {
+	if (lunGlDrawState.hooked) return;
+	lunGlDrawState.hooked = true;
+	const names = ["drawArrays", "drawElements", "drawArraysInstanced", "drawElementsInstanced", "drawRangeElements"];
+	const protos = [];
+	if (typeof WebGLRenderingContext !== "undefined") protos.push(WebGLRenderingContext.prototype);
+	if (typeof WebGL2RenderingContext !== "undefined") protos.push(WebGL2RenderingContext.prototype);
 	for (const proto of protos) {
 		for (const name of names) {
-			const original = proto[name];
-			if (typeof original !== "function" || original.__spkmodFpsWrapped) continue;
-			const wrapped = function (...args) {
-				lunAnyDrawFlag = true;
-				const c = this.canvas;
-				if (c) {
-					let isGame = c.__spkIsGame;
-					if (isGame !== true) {
-						isGame = !!(c.classList && c.classList.contains("sr-game-canvas"));
-						if (isGame) c.__spkIsGame = true;
-					}
-					if (isGame) lunGameDrawFlag = true;
+			const orig = proto[name];
+			if (typeof orig !== "function" || orig.__spkFpsHook) continue;
+			const wrapped = function () {
+				if (this.__spkFpsTick !== lunGlDrawState.tickId) {
+					this.__spkFpsTick = lunGlDrawState.tickId;
+					lunGlDrawState.pending.push(this);
 				}
-				return Reflect.apply(original, this, args);
+				return orig.apply(this, arguments);
 			};
-			Object.defineProperty(wrapped, "__spkmodFpsWrapped", { value: true });
-			try { proto[name] = wrapped; } catch (e) { console.warn("[SpeakiMod] Could not hook WebGL." + name, e); }
+			wrapped.__spkFpsHook = true;
+			proto[name] = wrapped;
 		}
 	}
 }
-try { lunInstallWebGLDrawCounter(); } catch (e) { console.warn("[SpeakiMod] GL FPS hook failed", e); }
 
 function lunFlushRenderedFrames() {
-	if (lunGameDrawFlag) { lunGameRendered++; lunGameEverDrew = true; lunGameDrawFlag = false; }
-	if (lunAnyDrawFlag)  { lunAnyRendered++;  lunAnyEverDrew = true;  lunAnyDrawFlag = false; }
+	const st = lunGlDrawState;
+	if (st.pending.length) {
+		st.everDrew = true;
+		for (const gl of st.pending) {
+			const key = gl.canvas || gl;
+			st.counts.set(key, (st.counts.get(key) || 0) + 1);
+		}
+		st.pending.length = 0;
+	}
+	st.tickId++;
 }
 
 function lunConsumeRenderedFps(rafCount, elapsedMs) {
-	const raw = lunGameEverDrew ? lunGameRendered : (lunAnyEverDrew ? lunAnyRendered : rafCount);
-	lunGameRendered = 0;
-	lunAnyRendered = 0;
+	const st = lunGlDrawState;
+	let best = 0;
+	for (const v of st.counts.values()) if (v > best) best = v;
+	st.counts.clear();
+	const raw = st.everDrew ? best : rafCount;
 	return Math.round(raw * 1000 / Math.max(elapsedMs, 1));
 }
 
 function fpsLoop() {
 	const now = performance.now();
 	lunFrameCount++;
-	lunFlushRenderedFrames();  
+	lunFlushRenderedFrames();
 
 	if (now - lunLastFrameTime >= 1000) {
 		lunCurrentFps = lunConsumeRenderedFps(lunFrameCount, now - lunLastFrameTime);
