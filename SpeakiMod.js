@@ -20374,6 +20374,85 @@ if (hudWindow) {
 	makeDraggable(hudWindow, [hudWindow, mainCard, headerRow, headerBtn, dragHandle, footerHandle].filter(Boolean));
 }
 
+let lunGameDrawSeen = false;
+let lunGameCanvas = null;
+
+function lunFindGameCanvas() {
+    const rendererCanvas = window.gameState?.renderer?.domElement;
+
+    if (rendererCanvas instanceof HTMLCanvasElement) {
+        return rendererCanvas;
+    }
+
+    const candidates = [...document.querySelectorAll("canvas")]
+        .map(canvas => ({
+            canvas,
+            rect: canvas.getBoundingClientRect(),
+            style: getComputedStyle(canvas)
+        }))
+        .filter(({ canvas, rect, style }) =>
+            canvas.width > 0 &&
+            canvas.height > 0 &&
+            rect.width > 0 &&
+            rect.height > 0 &&
+            style.display !== "none" &&
+            style.visibility !== "hidden"
+        )
+        .sort((a, b) =>
+            (b.rect.width * b.rect.height) -
+            (a.rect.width * a.rect.height)
+        );
+
+    return candidates[0]?.canvas ?? null;
+}
+
+function lunInstallWebGLDrawCounter() {
+    const drawMethods = [
+        "drawArrays",
+        "drawElements",
+        "drawRangeElements",
+        "drawArraysInstanced",
+        "drawElementsInstanced"
+    ];
+
+    const prototypes = [
+        window.WebGLRenderingContext?.prototype,
+        window.WebGL2RenderingContext?.prototype
+    ].filter(Boolean);
+
+    for (const proto of prototypes) {
+        for (const methodName of drawMethods) {
+            const original = proto[methodName];
+
+            if (typeof original !== "function" || original.__spkmodFpsWrapped) {
+                continue;
+            }
+
+            const wrapped = function (...args) {
+                if (!lunGameCanvas || !lunGameCanvas.isConnected) {
+                    lunGameCanvas = lunFindGameCanvas();
+                }
+
+                if (this.canvas === lunGameCanvas) {
+                    lunGameDrawSeen = true;
+                }
+
+                return Reflect.apply(original, this, args);
+            };
+
+            Object.defineProperty(wrapped, "__spkmodFpsWrapped", {value: true});
+
+            try {
+                proto[methodName] = wrapped;
+            } catch (error) {
+                console.warn("[SpeakiMod+] Could not hook WebGL.${methodName}", error);
+            }
+        }
+    }
+}
+
+lunInstallWebGLDrawCounter();
+
 let lunLastFrameTime = performance.now();
 let lunFrameCount = 0;
 lunCurrentFps = 0;
@@ -20457,67 +20536,18 @@ async function performActivePing() {
 	}
 }
 
-const lunGlDrawState = {
-	hooked: false,
-	tickId: 0,
-	pending: [],
-	counts: new Map(),
-	everDrew: false
-};
-
-function lunHookGlDrawCalls() {
-	if (lunGlDrawState.hooked) return;
-	lunGlDrawState.hooked = true;
-	const names = ["drawArrays", "drawElements", "drawArraysInstanced", "drawElementsInstanced", "drawRangeElements"];
-	const protos = [];
-	if (typeof WebGLRenderingContext !== "undefined") protos.push(WebGLRenderingContext.prototype);
-	if (typeof WebGL2RenderingContext !== "undefined") protos.push(WebGL2RenderingContext.prototype);
-	for (const proto of protos) {
-		for (const name of names) {
-			const orig = proto[name];
-			if (typeof orig !== "function" || orig.__spkFpsHook) continue;
-			const wrapped = function () {
-				if (this.__spkFpsTick !== lunGlDrawState.tickId) {
-					this.__spkFpsTick = lunGlDrawState.tickId;
-					lunGlDrawState.pending.push(this);
-				}
-				return orig.apply(this, arguments);
-			};
-			wrapped.__spkFpsHook = true;
-			proto[name] = wrapped;
-		}
-	}
-}
-
-function lunFlushRenderedFrames() {
-	const st = lunGlDrawState;
-	if (st.pending.length) {
-		st.everDrew = true;
-		for (const gl of st.pending) {
-			const key = gl.canvas || gl;
-			st.counts.set(key, (st.counts.get(key) || 0) + 1);
-		}
-		st.pending.length = 0;
-	}
-	st.tickId++;
-}
-
-function lunConsumeRenderedFps(rafCount, elapsedMs) {
-	const st = lunGlDrawState;
-	let best = 0;
-	for (const v of st.counts.values()) if (v > best) best = v;
-	st.counts.clear();
-	const raw = st.everDrew ? best : rafCount;
-	return Math.round(raw * 1000 / Math.max(elapsedMs, 1));
-}
-
 function fpsLoop() {
 	const now = performance.now();
-	lunFrameCount++;
-	lunFlushRenderedFrames();
+	
+	if (lunGameDrawSeen) {
+		lunFrameCount++;
+		lunGameDrawSeen = false;
+	}
+	
+	const elapsed = now - lunLastFrameTime;
 
-	if (now - lunLastFrameTime >= 1000) {
-		lunCurrentFps = lunConsumeRenderedFps(lunFrameCount, now - lunLastFrameTime);
+	if (elapsed >= 1000) {
+		lunCurrentFps = Math.round(lunFrameCount * 1000 / elapsed);
 		lunFrameCount = 0;
 		if (lunFpsPingEnabled && lunHudElements.fpsPingTracker) {
 			setText(lunHudElements.fpsPingTracker, t("fpsPingText", lunCurrentFps, lunCurrentPing));
