@@ -20375,7 +20375,6 @@ if (hudWindow) {
 }
 
 let lunLastFrameTime = performance.now();
-let lunFrameCount = 0;
 lunCurrentFps = 0;
 lunCurrentPing = "--";
 let lunLastPingTime = performance.now() + 3000; // 3s initial delay on boot
@@ -20457,9 +20456,16 @@ async function performActivePing() {
 	}
 }
 
-let lunGameCanvasDrawSeen = false;
+window.__spkmodFpsState = {
+    drawnSinceSample: false,
+    drawCalls: 0,
+    renderedFrames: 0,
+    hooksInstalled: 0
+};
 
-(function installGameCanvasFpsHooks() {
+const spkmodFpsState = window.__spkmodFpsState;
+
+(function installGameFpsHooks() {
     const methods = [
         "drawArrays",
         "drawElements",
@@ -20475,27 +20481,34 @@ let lunGameCanvasDrawSeen = false;
 
     for (const proto of new Set(prototypes)) {
         for (const name of methods) {
-            const descriptor = Object.getOwnPropertyDescriptor(proto, name);
+            const descriptor =
+                Object.getOwnPropertyDescriptor(proto, name);
 
-            if (!descriptor || typeof descriptor.value !== "function") {
+            if (
+                !descriptor ||
+                typeof descriptor.value !== "function"
+            ) {
                 continue;
             }
 
             const original = descriptor.value;
 
-            if (original.__speakiModFpsWrapped) {
+            if (original.__spkmodActualFpsHook) {
                 continue;
             }
 
             const wrapped = function (...args) {
-                if (this.canvas?.classList?.contains("sr-game-canvas")) {
-                    lunGameCanvasDrawSeen = true;
+                if (
+                    this.canvas?.classList?.contains("sr-game-canvas")
+                ) {
+                    spkmodFpsState.drawnSinceSample = true;
+                    spkmodFpsState.drawCalls++;
                 }
 
                 return Reflect.apply(original, this, args);
             };
 
-            Object.defineProperty(wrapped, "__speakiModFpsWrapped", {
+            Object.defineProperty(wrapped, "__spkmodActualFpsHook", {
                 value: true
             });
 
@@ -20504,55 +20517,116 @@ let lunGameCanvasDrawSeen = false;
                     ...descriptor,
                     value: wrapped
                 });
+
+                if (proto[name] === wrapped) {
+                    spkmodFpsState.hooksInstalled++;
+                }
             } catch (error) {
-                console.error("[SpeakiMod+] <FPS Counter> Hook failed:", name, error);
+                console.error(
+                    "[SpeakiMod FPS] Hook failed:",
+                    name,
+                    error
+                );
             }
         }
     }
+
+    console.log(
+        "[SpeakiMod FPS] WebGL hooks installed:",
+        spkmodFpsState.hooksInstalled
+    );
 })();
 
-function fpsLoop() {
-	const now = performance.now();
-    if (lunGameCanvasDrawSeen) {
-        lunFrameCount++;
-        lunGameCanvasDrawSeen = false;
+function spkmodSampleGameFrame() {
+    if (spkmodFpsState.drawnSinceSample) {
+        spkmodFpsState.renderedFrames++;
+        spkmodFpsState.drawnSinceSample = false;
     }
 
-	if (now - lunLastFrameTime >= 1000) {
-		lunCurrentFps = Math.round(lunFrameCount * 1000 / (now - lunLastFrameTime));
-		lunFrameCount = 0;
-		if (lunFpsPingEnabled && lunHudElements.fpsPingTracker) {
-			setText(lunHudElements.fpsPingTracker, t("fpsPingText", lunCurrentFps, lunCurrentPing));
-		}
+    requestAnimationFrame(spkmodSampleGameFrame);
+}
+requestAnimationFrame(spkmodSampleGameFrame);
 
-		if (lunResetTimerEnabled && lunHudElements.resetTimerTracker) {
-			const nowUtc = new Date();
-			const kstOffset = 9 * 60 * 60 * 1000;
-			const kstNow = new Date(nowUtc.getTime() + kstOffset);
-			const kstNextMidnight = new Date(kstNow);
-			kstNextMidnight.setUTCHours(24, 0, 0, 0); // Next midnight in KST
-			const diffMs = kstNextMidnight.getTime() - kstNow.getTime();
-			const diffTotalSeconds = Math.floor(diffMs / 1000);
-			const hours = Math.floor(diffTotalSeconds / 3600);
-			const minutes = Math.floor((diffTotalSeconds % 3600) / 60);
-			const seconds = diffTotalSeconds % 60;
-			setText(lunHudElements.resetTimerTracker, t("resetTimerText", 
-				String(hours).padStart(2, '0'), 
-				String(minutes).padStart(2, '0'),
-				String(seconds).padStart(2, '0')
-			));
-		}
+let lunFpsLastRenderedFrames = 0;
 
-		if (typeof updateStatsModalLive === 'function' && lunHudElements.statsModal && !lunHudElements.statsModal.classList.contains("hidden")) {
-			updateStatsModalLive();
-		}
+window.__spkmodFpsDebug = function () {
+    return {
+        canvasFound: !!document.querySelector(
+            "canvas.sr-game-canvas"
+        ),
+        hooksInstalled: spkmodFpsState.hooksInstalled,
+        drawCalls: spkmodFpsState.drawCalls,
+        renderedFrames: spkmodFpsState.renderedFrames,
+        currentFps: lunCurrentFps
+    };
+};
 
-		performActivePing();
+function fpsLoop() {
+    const now = performance.now();
+    const elapsed = now - lunLastFrameTime;
 
-		lunLastFrameTime = now;
-	}
-	
-	requestAnimationFrame(fpsLoop);
+    if (elapsed >= 1000) {
+        const renderedTotal = spkmodFpsState.renderedFrames;
+
+        lunCurrentFps = Math.round(
+            (renderedTotal - lunFpsLastRenderedFrames) *
+            1000 / elapsed
+        );
+
+        lunFpsLastRenderedFrames = renderedTotal;
+
+        if (lunFpsPingEnabled && lunHudElements.fpsPingTracker) {
+            setText(
+                lunHudElements.fpsPingTracker,
+                t("fpsPingText", lunCurrentFps, lunCurrentPing)
+            );
+        }
+
+        if (lunResetTimerEnabled && lunHudElements.resetTimerTracker) {
+            const nowUtc = new Date();
+            const kstOffset = 9 * 60 * 60 * 1000;
+            const kstNow = new Date(
+                nowUtc.getTime() + kstOffset
+            );
+
+            const kstNextMidnight = new Date(kstNow);
+            kstNextMidnight.setUTCHours(24, 0, 0, 0);
+
+            const diffMs =
+                kstNextMidnight.getTime() - kstNow.getTime();
+
+            const diffTotalSeconds = Math.floor(diffMs / 1000);
+            const hours = Math.floor(diffTotalSeconds / 3600);
+            const minutes = Math.floor(
+                (diffTotalSeconds % 3600) / 60
+            );
+            const seconds = diffTotalSeconds % 60;
+
+            setText(
+                lunHudElements.resetTimerTracker,
+                t(
+                    "resetTimerText",
+                    String(hours).padStart(2, "0"),
+                    String(minutes).padStart(2, "0"),
+                    String(seconds).padStart(2, "0")
+                )
+            );
+        }
+
+        if (
+            typeof updateStatsModalLive === "function" &&
+            lunHudElements.statsModal &&
+            !lunHudElements.statsModal.classList.contains("hidden")
+        ) {
+            updateStatsModalLive();
+        }
+
+        performActivePing();
+
+        lunLastFrameTime = now;
+    }
+
+    requestAnimationFrame(fpsLoop);
 }
 requestAnimationFrame(fpsLoop);
 
