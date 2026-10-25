@@ -20456,177 +20456,114 @@ async function performActivePing() {
 	}
 }
 
-window.__spkmodFpsState = {
-    drawnSinceSample: false,
-    drawCalls: 0,
-    renderedFrames: 0,
-    hooksInstalled: 0
+const spkmodFpsState = {
+	enabled: false,
+	drawn: false,
+	frames: 0
 };
-
-const spkmodFpsState = window.__spkmodFpsState;
-
-(function installGameFpsHooks() {
-    const methods = [
-        "drawArrays",
-        "drawElements",
-        "drawRangeElements",
-        "drawArraysInstanced",
-        "drawElementsInstanced"
-    ];
-
-    const prototypes = [
-        window.WebGLRenderingContext?.prototype,
-        window.WebGL2RenderingContext?.prototype
-    ].filter(Boolean);
-
-    for (const proto of new Set(prototypes)) {
-        for (const name of methods) {
-            const descriptor =
-                Object.getOwnPropertyDescriptor(proto, name);
-
-            if (
-                !descriptor ||
-                typeof descriptor.value !== "function"
-            ) {
-                continue;
-            }
-
-            const original = descriptor.value;
-
-            if (original.__spkmodActualFpsHook) {
-                continue;
-            }
-
-            const wrapped = function (...args) {
-                if (
-                    this.canvas?.classList?.contains("sr-game-canvas")
-                ) {
-                    spkmodFpsState.drawnSinceSample = true;
-                    spkmodFpsState.drawCalls++;
-                }
-
-                return Reflect.apply(original, this, args);
-            };
-
-            Object.defineProperty(wrapped, "__spkmodActualFpsHook", {
-                value: true
-            });
-
-            try {
-                Object.defineProperty(proto, name, {
-                    ...descriptor,
-                    value: wrapped
-                });
-
-                if (proto[name] === wrapped) {
-                    spkmodFpsState.hooksInstalled++;
-                }
-            } catch (error) {
-                console.error(
-                    "[SpeakiMod FPS] Hook failed:",
-                    name,
-                    error
-                );
-            }
-        }
-    }
-
-    console.log(
-        "[SpeakiMod FPS] WebGL hooks installed:",
-        spkmodFpsState.hooksInstalled
-    );
-})();
-
-function spkmodSampleGameFrame() {
-    if (spkmodFpsState.drawnSinceSample) {
-        spkmodFpsState.renderedFrames++;
-        spkmodFpsState.drawnSinceSample = false;
-    }
-
-    requestAnimationFrame(spkmodSampleGameFrame);
-}
-requestAnimationFrame(spkmodSampleGameFrame);
 
 let lunFpsLastRenderedFrames = 0;
 
-window.__spkmodFpsDebug = function () {
-    return {
-        canvasFound: !!document.querySelector(
-            "canvas.sr-game-canvas"
-        ),
-        hooksInstalled: spkmodFpsState.hooksInstalled,
-        drawCalls: spkmodFpsState.drawCalls,
-        renderedFrames: spkmodFpsState.renderedFrames,
-        currentFps: lunCurrentFps
-    };
-};
+function spkmodResetFpsBaseline() {
+	lunLastFrameTime = performance.now();
+	lunFpsLastRenderedFrames = spkmodFpsState.frames;
+	spkmodFpsState.drawn = false;
+}
+
+document.addEventListener("visibilitychange", spkmodResetFpsBaseline);
+const spkmodGameGl = new WeakSet();
+
+function spkmodIsGameGl(gl) {
+	if (spkmodGameGl.has(gl)) return true;
+	if (gl.canvas && gl.canvas.classList && gl.canvas.classList.contains("sr-game-canvas")) {
+		spkmodGameGl.add(gl);
+		return true;
+	}
+	return false;
+}
+
+(function installGameFpsHooks() {
+	const methods = ["drawArrays", "drawElements", "drawRangeElements", "drawArraysInstanced", "drawElementsInstanced"];
+	const prototypes = [
+		window.WebGLRenderingContext && window.WebGLRenderingContext.prototype,
+		window.WebGL2RenderingContext && window.WebGL2RenderingContext.prototype
+	].filter(Boolean);
+
+	for (const proto of new Set(prototypes)) {
+		for (const name of methods) {
+			const descriptor = Object.getOwnPropertyDescriptor(proto, name);
+			if (!descriptor || typeof descriptor.value !== "function") continue;
+
+			const original = descriptor.value;
+			if (original.__spkmodActualFpsHook) continue;
+
+			const wrapped = function () {
+				if (spkmodFpsState.enabled && spkmodIsGameGl(this)) {
+					spkmodFpsState.drawn = true;
+				}
+				return original.apply(this, arguments);
+			};
+			wrapped.__spkmodActualFpsHook = true;
+
+			try {
+				Object.defineProperty(proto, name, { ...descriptor, value: wrapped });
+			} catch (_) {}
+		}
+	}
+})();
 
 function fpsLoop() {
-    const now = performance.now();
-    const elapsed = now - lunLastFrameTime;
+	const now = performance.now();
 
-    if (elapsed >= 1000) {
-        const renderedTotal = spkmodFpsState.renderedFrames;
+	const fpsWanted = lunFpsPingEnabled || !!(lunHudElements.statsModal && !lunHudElements.statsModal.classList.contains("hidden"));
+	if (fpsWanted !== spkmodFpsState.enabled) {
+		spkmodFpsState.enabled = fpsWanted;
+		spkmodResetFpsBaseline();
+	}
 
-        lunCurrentFps = Math.round(
-            (renderedTotal - lunFpsLastRenderedFrames) *
-            1000 / elapsed
-        );
+	if (spkmodFpsState.drawn) {
+		spkmodFpsState.frames++;
+		spkmodFpsState.drawn = false;
+	}
 
-        lunFpsLastRenderedFrames = renderedTotal;
+	if (now - lunLastFrameTime >= 1000) {
+		if (spkmodFpsState.enabled) {
+			lunCurrentFps = Math.round((spkmodFpsState.frames - lunFpsLastRenderedFrames) * 1000 / (now - lunLastFrameTime));
+		}
+		lunFpsLastRenderedFrames = spkmodFpsState.frames;
 
-        if (lunFpsPingEnabled && lunHudElements.fpsPingTracker) {
-            setText(
-                lunHudElements.fpsPingTracker,
-                t("fpsPingText", lunCurrentFps, lunCurrentPing)
-            );
-        }
+		if (lunFpsPingEnabled && lunHudElements.fpsPingTracker) {
+			setText(lunHudElements.fpsPingTracker, t("fpsPingText", lunCurrentFps, lunCurrentPing));
+		}
 
-        if (lunResetTimerEnabled && lunHudElements.resetTimerTracker) {
-            const nowUtc = new Date();
-            const kstOffset = 9 * 60 * 60 * 1000;
-            const kstNow = new Date(
-                nowUtc.getTime() + kstOffset
-            );
+		if (lunResetTimerEnabled && lunHudElements.resetTimerTracker) {
+			const nowUtc = new Date();
+			const kstOffset = 9 * 60 * 60 * 1000;
+			const kstNow = new Date(nowUtc.getTime() + kstOffset);
+			const kstNextMidnight = new Date(kstNow);
+			kstNextMidnight.setUTCHours(24, 0, 0, 0); // Next midnight in KST
+			const diffMs = kstNextMidnight.getTime() - kstNow.getTime();
+			const diffTotalSeconds = Math.floor(diffMs / 1000);
+			const hours = Math.floor(diffTotalSeconds / 3600);
+			const minutes = Math.floor((diffTotalSeconds % 3600) / 60);
+			const seconds = diffTotalSeconds % 60;
+			setText(lunHudElements.resetTimerTracker, t("resetTimerText",
+				String(hours).padStart(2, '0'),
+				String(minutes).padStart(2, '0'),
+				String(seconds).padStart(2, '0')
+			));
+		}
 
-            const kstNextMidnight = new Date(kstNow);
-            kstNextMidnight.setUTCHours(24, 0, 0, 0);
+		if (typeof updateStatsModalLive === 'function' && lunHudElements.statsModal && !lunHudElements.statsModal.classList.contains("hidden")) {
+			updateStatsModalLive();
+		}
 
-            const diffMs =
-                kstNextMidnight.getTime() - kstNow.getTime();
+		performActivePing();
 
-            const diffTotalSeconds = Math.floor(diffMs / 1000);
-            const hours = Math.floor(diffTotalSeconds / 3600);
-            const minutes = Math.floor(
-                (diffTotalSeconds % 3600) / 60
-            );
-            const seconds = diffTotalSeconds % 60;
+		lunLastFrameTime = now;
+	}
 
-            setText(
-                lunHudElements.resetTimerTracker,
-                t(
-                    "resetTimerText",
-                    String(hours).padStart(2, "0"),
-                    String(minutes).padStart(2, "0"),
-                    String(seconds).padStart(2, "0")
-                )
-            );
-        }
-
-        if (
-            typeof updateStatsModalLive === "function" &&
-            lunHudElements.statsModal &&
-            !lunHudElements.statsModal.classList.contains("hidden")
-        ) {
-            updateStatsModalLive();
-        }
-
-        performActivePing();
-
-        lunLastFrameTime = now;
-    }
-
-    requestAnimationFrame(fpsLoop);
+	requestAnimationFrame(fpsLoop);
 }
 requestAnimationFrame(fpsLoop);
 
