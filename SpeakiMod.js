@@ -1476,6 +1476,9 @@ function setLanguage(lang) {
 		}
 	}
 	refreshI18n();
+	if (typeof applySpkmodFont === "function" && typeof lunFontPreset !== "undefined" && lunFontPreset !== "default") {
+		applySpkmodFont(lunFontPreset, undefined, false);
+	}
 }
 
 window.getZoneName = getZoneName;
@@ -1575,6 +1578,10 @@ var lunPanelElements = {
 	shakeBtn: null,
 	superShakeBtn: null,
 	hyperShakeBtn: null,
+	pumpkinCartTexBtn: null,
+	pumpkinCartTexBtn1: null,
+	pumpkinCartTexBtn2: null,
+	pumpkinCartTexBtn3: null,
 	pinnedQuestHeader: null,
 	langSelect: null,
 	settingsHeader: null,
@@ -1582,6 +1589,12 @@ var lunPanelElements = {
 	filterToggleInput: null,
 	gmChatToggleLabel: null,
 	gmChatToggleInput: null,
+	friendChatToggleLabel: null,
+	friendChatToggleInput: null,
+	partyChatToggleLabel: null,
+	partyChatToggleInput: null,
+	chatRandomColorsLabel: null,
+	chatRandomColorsToggleInput: null,
 	mentionAlertToggleLabel: null,
 	mentionAlertToggleInput: null,
 	translateToggleLabel: null,
@@ -1601,6 +1614,7 @@ var lunPanelElements = {
 	gamepadSettingsBtn: null,
 	patchNotesBtn: null,
 	eventBtn: null,
+	minigameBtn: null,
 	statsBtn: null,
 	minigameTrackerLabel: null,
 	minigameTrackerToggleInput: null,
@@ -1613,6 +1627,16 @@ var lunPanelElements = {
 	resolutionOverrideInput: null,
 	discordRpcLabel: null,
 	discordRpcToggleInput: null,
+	muteMinimizedLabel: null,
+	muteMinimizedToggleInput: null,
+	separatePanelLabel: null,
+	separatePanelToggleInput: null,
+	hidePlayerLevelsLabel: null,
+	hidePlayerLevelsToggleInput: null,
+	channelTrackerToggleLabel: null,
+	channelTrackerToggleInput: null,
+	telemetryToggleLabel: null,
+	telemetryToggleInput: null,
 	settingsCatGeneral: null,
 	settingsCatHUD: null,
 	localEffectsBtn: null,
@@ -1620,7 +1644,12 @@ var lunPanelElements = {
 	editsModalTitle: null,
 	exportSettingsBtn: null,
 	importSettingsBtn: null,
-	resetPositionsBtn: null
+	resetPositionsBtn: null,
+	fontPresetLabel: null,
+	fontPresetSelect: null,
+	customFontContainer: null,
+	customFontInputLabel: null,
+	customFontInput: null
 };
 var lunMenuFoldingLevel = 0;
 
@@ -1679,6 +1708,13 @@ function setFriendChatHighlightEnabled(enabled) {
 	if (window.localStorage) localStorage.setItem("spkmod-friend-highlight-enabled", lunFriendChatHighlightEnabled ? "true" : "false");
 }
 
+var lunPartyChatHighlightEnabled = (window.localStorage && localStorage.getItem("spkmod-party-highlight-enabled")) === "true";
+
+function setPartyChatHighlightEnabled(enabled) {
+	lunPartyChatHighlightEnabled = !!enabled;
+	if (window.localStorage) localStorage.setItem("spkmod-party-highlight-enabled", lunPartyChatHighlightEnabled ? "true" : "false");
+}
+
 var lunLastFriendFetchTime = 0;
 var lunFriendFetchInProgress = false;
 
@@ -1695,7 +1731,7 @@ function fetchFriendsList(force = false) {
 	lunFriendFetchInProgress = true;
 	const endpoint = (typeof lunActivePingEndpoint !== 'undefined' && lunActivePingEndpoint) || 
 	                 (typeof window.lunActiveApiEndpoint !== 'undefined' && window.lunActiveApiEndpoint) || 
-	                 "https://relay.overture.io.kr";
+	                 "https://sr1.overture.io.kr";
 	const targetUrl = endpoint + "/api/friend/list";
 	const headers = {};
 	if (token) headers["authorization"] = `Bearer ${token}`;
@@ -2303,6 +2339,15 @@ function setChatTimestampsEnabled(enabled) {
 	if (window.localStorage) localStorage.setItem("spkmod-chat-timestamps", lunChatTimestampsEnabled ? "true" : "false");
 }
 
+var lunChatRandomColorsEnabled = (window.localStorage && localStorage.getItem("spkmod-chat-random-colors")) === "true";
+function setChatRandomColorsEnabled(enabled) {
+	lunChatRandomColorsEnabled = !!enabled;
+	if (window.localStorage) localStorage.setItem("spkmod-chat-random-colors", lunChatRandomColorsEnabled ? "true" : "false");
+	if (typeof document !== "undefined" && document.body) {
+		document.body.classList.toggle("spkmod-chat-player-colors-on", lunChatRandomColorsEnabled);
+	}
+}
+
 var lunLowHpWarningEnabled = (window.localStorage && localStorage.getItem("spkmod-low-hp-warning")) === "true";
 function setLowHpWarningEnabled(enabled) {
 	lunLowHpWarningEnabled = !!enabled;
@@ -2438,7 +2483,11 @@ function updateMuteButtonUI() {
 	const tip = muted ? (t("unmuteBtnTooltip") || "Unmute Game") : (t("muteBtnTooltip") || "Mute Game");
 	if (typeof lunPanelElements !== "undefined" && lunPanelElements.muteBtn) {
 		lunPanelElements.muteBtn.innerText = icon;
-		lunPanelElements.muteBtn.title = tip;
+		if (typeof setSpkmodRichTooltip === "function") {
+			setSpkmodRichTooltip(lunPanelElements.muteBtn, icon + " " + tip);
+		} else {
+			lunPanelElements.muteBtn.title = tip;
+		}
 	}
 	const mobileBtn = document.getElementById("spkmod-mobile-mute-toggle");
 	if (mobileBtn) {
@@ -2488,6 +2537,7 @@ function hookNativeMuteCheckbox() {
 		});
 	}
 }
+
 
 function findGameAudioListener() {
 	try {
@@ -3346,16 +3396,20 @@ const SPKMOD_SETTINGS_KEYS = new Set([
 	"spkmod-bg-opacity",
 	"spkmod-camera-effect",
 	"spkmod-channel-tracker",
+	"spkmod-chat-random-colors",
 	"spkmod-chat-timestamps",
 	"spkmod-currency-tracker",
+	"spkmod-custom-font",
 	"spkmod-custom-hud-bg",
 	"spkmod-custom-hud-unlocked",
 	"spkmod-disable-right-click-pinning",
 	"spkmod-discord-rpc",
 	"spkmod-drone-speed",
+	"spkmod-emoji-size",
 	"spkmod-exp-interval-minutes",
 	"spkmod-exp-per-hour",
 	"spkmod-filter-enabled",
+	"spkmod-font-preset",
 	"spkmod-resolution-override",
 	"spkmod-fp-pitch",
 	"spkmod-fps-ping",
@@ -3378,6 +3432,7 @@ const SPKMOD_SETTINGS_KEYS = new Set([
 	"spkmod-name-presets",
 	"spkmod-outgoing-source-lang",
 	"spkmod-panel-left",
+	"spkmod-party-highlight-enabled",
 	"spkmod-pos-spkmod-bbs-modal",
 	"spkmod-pos-spkmod-effects-modal",
 	"spkmod-pos-spkmod-edits-modal",
@@ -3389,9 +3444,11 @@ const SPKMOD_SETTINGS_KEYS = new Set([
 	"spkmod-pos-spkmod-map-modal",
 	"spkmod-pos-spkmod-panel",
 	"spkmod-pos-spkmod-patchnotes-modal",
+	"spkmod-pos-spkmod-quests-modal",
 	"spkmod-pos-spkmod-settings-modal",
 	"spkmod-pos-spkmod-stats-modal",
 	"spkmod-pumpkin-tracker",
+	"spkmod-quests-modal-open",
 	"spkmod-reset-timer",
 	"spkmod-separate-panel",
 	"spkmod-session-gold",
@@ -3767,11 +3824,322 @@ var lunViewClip = false;
 var lunBgOpacity = (window.localStorage && localStorage.getItem("spkmod-bg-opacity")) || "glass";
 var lunAccentColor = (window.localStorage && localStorage.getItem("spkmod-accent-color")) || "#ffd54a";
 var lunHudBackground = (window.localStorage && localStorage.getItem("spkmod-hud-bg")) || "none";
+
+const SPKMOD_REPO_FONTS_BASE = "https://raw.githubusercontent.com/DJTOMATO/SpeakiRPG/main/fonts/";
+const SPKMOD_EMOJI_FONT_FALLBACK = '"Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji"';
+
+
+const SPKMOD_VALID_FONT_PRESETS = new Set([
+	"default",
+	"trickcalPop",
+	"oneMobilePop",
+	"dfpPop",
+	"mochiyPop",
+	"knBobohei",
+	"serif",
+	"rounded",
+	"pixel",
+	"monospace",
+	"custom"
+]);
+
+var lunFontPreset = (window.localStorage && localStorage.getItem("spkmod-font-preset")) || "default";
+if (!SPKMOD_VALID_FONT_PRESETS.has(lunFontPreset)) lunFontPreset = "default";
+var lunCustomFont = (window.localStorage && localStorage.getItem("spkmod-custom-font")) || "";
+var lunActiveFontStack = "";
+var __spkmodFontRedrawTimer = null;
+
+function sanitizeSpkmodCustomFont(raw) {
+	if (!raw || typeof raw !== "string") return "";
+	const cleaned = raw.slice(0, 200).replace(/[{};<>\\`\r\n]/g, "");
+	const generics = new Set([
+		"serif", "sans-serif", "monospace", "cursive", "fantasy",
+		"system-ui", "ui-serif", "ui-sans-serif", "ui-monospace", "ui-rounded"
+	]);
+	const parts = cleaned.split(",").map(part => {
+		const trimmed = part.trim().replace(/^['"]+|['"]+$/g, "").replace(/['"]/g, "").trim();
+		if (!trimmed) return "";
+		if (generics.has(trimmed.toLowerCase())) return trimmed.toLowerCase();
+		return `"${trimmed}"`;
+	}).filter(Boolean);
+	if (!parts.length) return "";
+	return parts.join(", ") + ", " + SPKMOD_EMOJI_FONT_FALLBACK + ", sans-serif";
+}
+
+function buildSpkmodFontStack(preset, customValue) {
+	const lang = typeof spkmodLang === "string" ? spkmodLang : "en";
+	switch (preset) {
+		case "trickcalPop": {
+			if (lang === "ja") {
+				return `"SpkDFPPop1W9", "SpkMochiyPop", "Mochiy Pop One", "SpkOneMobilePop", "SpkKNBobohei", ${SPKMOD_EMOJI_FONT_FALLBACK}, sans-serif`;
+			}
+			if (lang === "ko") {
+				return `"SpkOneMobilePop", "SpkDFPPop1W9", "SpkMochiyPop", "Mochiy Pop One", "SpkKNBobohei", ${SPKMOD_EMOJI_FONT_FALLBACK}, sans-serif`;
+			}
+			if (lang === "zh-TW" || lang === "zh-CN") {
+				return `"SpkKNBobohei", "SpkDFPPop1W9", "SpkMochiyPop", "Mochiy Pop One", "SpkOneMobilePop", ${SPKMOD_EMOJI_FONT_FALLBACK}, sans-serif`;
+			}
+			return `"SpkOneMobilePop", "SpkMochiyPop", "Mochiy Pop One", "SpkDFPPop1W9", "SpkKNBobohei", ${SPKMOD_EMOJI_FONT_FALLBACK}, sans-serif`;
+		}
+		case "oneMobilePop":
+			return `"SpkOneMobilePop", "SpkDFPPop1W9", "SpkMochiyPop", "Mochiy Pop One", "SpkKNBobohei", ${SPKMOD_EMOJI_FONT_FALLBACK}, sans-serif`;
+		case "dfpPop":
+			return `"SpkDFPPop1W9", "SpkMochiyPop", "Mochiy Pop One", "SpkOneMobilePop", "SpkKNBobohei", ${SPKMOD_EMOJI_FONT_FALLBACK}, sans-serif`;
+		case "mochiyPop":
+			return `"SpkMochiyPop", "Mochiy Pop One", "SpkDFPPop1W9", "SpkOneMobilePop", "SpkKNBobohei", ${SPKMOD_EMOJI_FONT_FALLBACK}, sans-serif`;
+		case "knBobohei":
+			return `"SpkKNBobohei", "SpkDFPPop1W9", "SpkMochiyPop", "Mochiy Pop One", "SpkOneMobilePop", ${SPKMOD_EMOJI_FONT_FALLBACK}, sans-serif`;
+		case "serif": {
+			let cjkOrder = `"Noto Serif JP", "Noto Serif KR", "Noto Serif SC", "Noto Serif TC", "Noto Serif HK", "Yu Mincho", "Hiragino Mincho ProN", "Batang", "PMingLiU", "SimSun"`;
+			if (lang === "ko") {
+				cjkOrder = `"Noto Serif KR", "Noto Serif JP", "Noto Serif TC", "Noto Serif SC", "Noto Serif HK", "Batang", "Yu Mincho", "Hiragino Mincho ProN", "PMingLiU", "SimSun"`;
+			} else if (lang === "zh-TW") {
+				cjkOrder = `"Noto Serif TC", "Noto Serif HK", "Noto Serif JP", "Noto Serif KR", "Noto Serif SC", "PMingLiU", "Songti TC", "Yu Mincho", "Batang", "SimSun"`;
+			} else if (lang === "zh-CN") {
+				cjkOrder = `"Noto Serif SC", "Noto Serif TC", "Noto Serif HK", "Noto Serif JP", "Noto Serif KR", "SimSun", "Songti SC", "PMingLiU", "Yu Mincho", "Batang"`;
+			}
+			return `${cjkOrder}, "Noto Serif", Georgia, ${SPKMOD_EMOJI_FONT_FALLBACK}, serif`;
+		}
+		case "rounded": {
+			let roundedOrder = `"M PLUS Rounded 1c", "Jua", "ZCOOL KuaiLe", "Hiragino Maru Gothic ProN", "Yu Gothic UI", "Malgun Gothic", "Microsoft JhengHei"`;
+			if (lang === "ko") {
+				roundedOrder = `"Jua", "M PLUS Rounded 1c", "ZCOOL KuaiLe", "Malgun Gothic", "Apple SD Gothic Neo", "Yu Gothic UI", "Microsoft JhengHei"`;
+			} else if (lang === "zh-TW" || lang === "zh-CN") {
+				roundedOrder = `"ZCOOL KuaiLe", "M PLUS Rounded 1c", "Jua", "Microsoft JhengHei", "PingFang TC", "PingFang SC", "Yu Gothic UI", "Malgun Gothic"`;
+			}
+			return `${roundedOrder}, ${SPKMOD_EMOJI_FONT_FALLBACK}, sans-serif`;
+		}
+		case "pixel": {
+			let pixelOrder = `"DotGothic16", "SpkDungGeunMo", "Silkscreen", "MS Gothic", "GulimChe"`;
+			if (lang === "ko") {
+				pixelOrder = `"SpkDungGeunMo", "DotGothic16", "Silkscreen", "GulimChe", "MS Gothic"`;
+			} else if (lang !== "ja" && lang !== "zh-TW" && lang !== "zh-CN") {
+				pixelOrder = `"Silkscreen", "SpkDungGeunMo", "DotGothic16", "Consolas", "MS Gothic"`;
+			}
+			return `${pixelOrder}, ${SPKMOD_EMOJI_FONT_FALLBACK}, monospace`;
+		}
+		case "monospace":
+			return `"JetBrains Mono", Consolas, "SFMono-Regular", "D2Coding", "MS Gothic", "PMingLiU", "SimSun", ${SPKMOD_EMOJI_FONT_FALLBACK}, monospace`;
+		case "custom":
+			return sanitizeSpkmodCustomFont(customValue);
+		default:
+			return "";
+	}
+}
+
+function getSpkmodGoogleFontUrl(preset) {
+	switch (preset) {
+		case "trickcalPop":
+		case "oneMobilePop":
+		case "dfpPop":
+		case "mochiyPop":
+		case "knBobohei":
+			return "https://fonts.googleapis.com/css2?family=Mochiy+Pop+One&display=swap";
+		case "serif":
+			return "https://fonts.googleapis.com/css2?family=Noto+Serif+JP:wght@400;700&family=Noto+Serif+KR:wght@400;700&family=Noto+Serif+SC:wght@400;700&family=Noto+Serif+TC:wght@400;700&family=Noto+Serif+HK:wght@400;700&display=swap";
+		case "rounded":
+			return "https://fonts.googleapis.com/css2?family=M+PLUS+Rounded+1c:wght@400;700;800&family=Jua&family=ZCOOL+KuaiLe&display=swap";
+		case "pixel":
+			return "https://fonts.googleapis.com/css2?family=DotGothic16&family=Silkscreen:wght@400;700&display=swap";
+		case "monospace":
+			return "https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&display=swap";
+		default:
+			return "";
+	}
+}
+
+function ensureSpkmodFontResources(preset) {
+	if (typeof document === "undefined" || !document.head) return;
+
+	const needsPopFaces = (preset === "trickcalPop" || preset === "oneMobilePop" || preset === "dfpPop" || preset === "mochiyPop" || preset === "knBobohei");
+	const needsPixelFace = (preset === "pixel");
+	let faceStyle = document.getElementById("spkmod-font-faces");
+
+	if (!needsPopFaces && !needsPixelFace) {
+		if (faceStyle) faceStyle.remove();
+	} else {
+		if (!faceStyle) {
+			faceStyle = document.createElement("style");
+			faceStyle.id = "spkmod-font-faces";
+			document.head.appendChild(faceStyle);
+		}
+		let css = "";
+		if (needsPopFaces) {
+			css += `
+				@font-face {
+					font-family: "SpkOneMobilePop";
+					src: local("ONE Mobile POP"),
+					     local("ONE Mobile POP OTF"),
+					     local("ONEMobilePOP"),
+					     url("https://fastly.jsdelivr.net/gh/projectnoonnu/noonfonts_2105_2@1.0/ONE-Mobile-POP.woff") format("woff"),
+					     url("${SPKMOD_REPO_FONTS_BASE}ONE%20Mobile%20POP.ttf") format("truetype");
+					font-display: swap;
+				}
+				@font-face {
+					font-family: "SpkDFPPop1W9";
+					src: local("DFPop1-W9"),
+					     local("DFPPop1-W9"),
+					     local("DFP-Pop1-W9"),
+					     local("ＤＦＰ人気体W9"),
+					     local("DFP人気体W9"),
+					     url("${SPKMOD_REPO_FONTS_BASE}DFP-Pop1-W9.ttf") format("truetype");
+					font-display: swap;
+				}
+				@font-face {
+					font-family: "SpkMochiyPop";
+					src: local("MochiyPopOne-ExtraBold"),
+					     url("${SPKMOD_REPO_FONTS_BASE}MochiyPopOne-OTF-ExtraBold.otf") format("opentype"),
+					     local("Mochiy Pop One"),
+					     local("MochiyPopOne-Regular");
+					font-display: swap;
+				}
+				@font-face {
+					font-family: "SpkKNBobohei";
+					src: local("KNBobohei-Bold"),
+					     local("KNBobohei Bold"),
+					     local("KN波波黑-Bold"),
+					     local("KN波波黑 Bold"),
+					     url("${SPKMOD_REPO_FONTS_BASE}KNBobohei-Bold.ttf") format("truetype");
+					font-display: swap;
+				}
+			`;
+		}
+		if (needsPixelFace) {
+			css += `
+				@font-face {
+					font-family: "SpkDungGeunMo";
+					src: local("DungGeunMo"),
+					     local("둥근모꼴"),
+					     url("https://fastly.jsdelivr.net/gh/projectnoonnu/noonfonts_six@1.2/DungGeunMo.woff") format("woff");
+					font-display: swap;
+				}
+			`;
+		}
+		if (faceStyle.textContent !== css) {
+			faceStyle.textContent = css;
+		}
+	}
+
+	const gFontUrl = getSpkmodGoogleFontUrl(preset);
+	let linkEl = document.getElementById("spkmod-google-font-link");
+	if (!gFontUrl) {
+		if (linkEl) linkEl.remove();
+	} else {
+		if (!linkEl) {
+			linkEl = document.createElement("link");
+			linkEl.id = "spkmod-google-font-link";
+			linkEl.rel = "stylesheet";
+			document.head.appendChild(linkEl);
+		}
+		if (linkEl.href !== gFontUrl) {
+			linkEl.href = gFontUrl;
+		}
+	}
+}
+
+function scheduleSpkmodCanvasFontRefresh() {
+	if (__spkmodFontRedrawTimer) clearTimeout(__spkmodFontRedrawTimer);
+	__spkmodFontRedrawTimer = setTimeout(() => {
+		__spkmodFontRedrawTimer = null;
+		if (typeof window.spkmodForceNametagRedraw === "function") {
+			window.spkmodForceNametagRedraw();
+		}
+		if (typeof drawZoneMap === "function" && typeof document !== "undefined") {
+			const mapModal = document.getElementById("spkmod-map-modal");
+			if (mapModal && !mapModal.classList.contains("hidden")) {
+				try { drawZoneMap(); } catch (_) {}
+			}
+		}
+	}, 120);
+}
+
+function hookSpkmodCanvasFontOnce() {
+	if (typeof window === "undefined" || window.__spkmodCanvasFontHooked) return;
+	if (typeof CanvasRenderingContext2D === "undefined" || !CanvasRenderingContext2D.prototype) return;
+	const desc = Object.getOwnPropertyDescriptor(CanvasRenderingContext2D.prototype, "font");
+	if (!desc || typeof desc.set !== "function" || typeof desc.get !== "function") return;
+
+	Object.defineProperty(CanvasRenderingContext2D.prototype, "font", {
+		configurable: true,
+		enumerable: desc.enumerable,
+		get: function () {
+			return desc.get.call(this);
+		},
+		set: function (value) {
+			if (lunActiveFontStack && typeof value === "string") {
+				const m = value.match(/^(.*?\b\d+(?:\.\d+)?px(?:\s*\/\s*[^\s]+)?)\s+(.+)$/i);
+				if (m) {
+					return desc.set.call(this, `${m[1]} ${lunActiveFontStack}`);
+				}
+			}
+			return desc.set.call(this, value);
+		}
+	});
+	window.__spkmodCanvasFontHooked = true;
+
+	if (typeof document !== "undefined" && document.fonts && typeof document.fonts.addEventListener === "function") {
+		document.fonts.addEventListener("loadingdone", () => {
+			if (lunActiveFontStack) {
+				scheduleSpkmodCanvasFontRefresh();
+			}
+		});
+	}
+}
+
+function getSpkmodActiveFontStack() {
+	return lunActiveFontStack;
+}
+
+function applySpkmodFont(preset, customValue, persist = true) {
+	if (preset !== undefined) {
+		lunFontPreset = SPKMOD_VALID_FONT_PRESETS.has(preset) ? preset : "default";
+	}
+	if (customValue !== undefined) {
+		lunCustomFont = String(customValue);
+	}
+	if (persist && typeof window !== "undefined" && window.localStorage) {
+		localStorage.setItem("spkmod-font-preset", lunFontPreset);
+		localStorage.setItem("spkmod-custom-font", lunCustomFont);
+	}
+
+	ensureSpkmodFontResources(lunFontPreset);
+	lunActiveFontStack = buildSpkmodFontStack(lunFontPreset, lunCustomFont);
+
+	if (typeof updateDynamicStyles === "function") {
+		updateDynamicStyles();
+	}
+	scheduleSpkmodCanvasFontRefresh();
+
+	if (lunActiveFontStack && typeof document !== "undefined" && document.fonts && typeof document.fonts.load === "function") {
+		try {
+			document.fonts.load(`bold 24px ${lunActiveFontStack}`, "Speaki 스피키 スピキ 測試 123").then(() => {
+				scheduleSpkmodCanvasFontRefresh();
+			}).catch(() => {});
+		} catch (_) {}
+	}
+}
+
+window.getSpkmodActiveFontStack = getSpkmodActiveFontStack;
+window.applySpkmodFont = applySpkmodFont;
+hookSpkmodCanvasFontOnce();
+applySpkmodFont(lunFontPreset, lunCustomFont, false);
 var lunChromaKeyColor = (window.localStorage && localStorage.getItem("spkmod-chroma-key")) || "none";
 var lunChromaFloorShape = (window.localStorage && localStorage.getItem("spkmod-chroma-floor-shape")) || "off";
 var lunChromaFloorScale = parseFloat((window.localStorage && localStorage.getItem("spkmod-chroma-floor-scale")) || "1.0") || 1.0;
 var lunHideAllOtherPlayers = (window.localStorage && localStorage.getItem("spkmod-hide-all-players") === "true") || false;
 var lunLockedFacialExpression = (window.localStorage && localStorage.getItem("spkmod-locked-facial-expression")) || "none";
+var lunAllPlayersFacialExpression = "none";
+var lunTargetFacialExpressions = new Map();
+const LUN_FACIAL_EXPR_EMOJIS = {
+	open_confident: "😏",
+	open_curious: "🥺",
+	closed_lash_smile: "☺️",
+	closed_smile: "😄",
+	open_gentle: "😊",
+	closed_tongue_2: "😜",
+	open_teasing_tongue: "😛",
+	open_worried_tongue: "😨"
+};
 try { if (typeof window !== "undefined" && window.localStorage) localStorage.removeItem("spkmod-local-skin"); } catch (_) {}
 
 var lunSpeedometerEnabled = window.localStorage ? (localStorage.getItem("spkmod-speedometer") !== "false") : true;
@@ -4036,23 +4404,58 @@ function setHideAllOtherPlayers(enabled) {
 	}
 }
 
+function setAvatarFacialExpression(avatar, exprKey) {
+	const fe = avatar?.faceExpression;
+	if (!fe) return false;
+	if (!exprKey || exprKey === "none") {
+		if (typeof fe.endOverride === "function") {
+			fe.endOverride();
+		}
+	} else {
+		if (typeof fe.beginOverride === "function") {
+			fe.beginOverride();
+		}
+		if (typeof fe.setOverrideExpression === "function") {
+			fe.setOverrideExpression(exprKey);
+		}
+	}
+	return true;
+}
+
+function getRemotePlayerTargetExpression(player) {
+	if (!player || !player.info || !lunTargetFacialExpressions || lunTargetFacialExpressions.size === 0) return null;
+	const curName = (player.info.name || "").trim().toLowerCase();
+	const origName = (player.info.__spkmodOrigName || "").trim().toLowerCase();
+	if (curName && lunTargetFacialExpressions.has(curName)) return lunTargetFacialExpressions.get(curName);
+	if (origName && lunTargetFacialExpressions.has(origName)) return lunTargetFacialExpressions.get(origName);
+	return null;
+}
+
 function applyLockedFacialExpression(exprKey) {
 	lunLockedFacialExpression = exprKey || "none";
 	if (window.localStorage) {
 		localStorage.setItem("spkmod-locked-facial-expression", lunLockedFacialExpression);
 	}
-	const fe = gameState?.localAvatar?.faceExpression;
-	if (fe) {
-		if (lunLockedFacialExpression === "none") {
-			if (typeof fe.endOverride === "function") {
-				fe.endOverride();
-			}
-		} else {
-			if (typeof fe.beginOverride === "function") {
-				fe.beginOverride();
-			}
-			if (typeof fe.setOverrideExpression === "function") {
-				fe.setOverrideExpression(lunLockedFacialExpression);
+	setAvatarFacialExpression(gameState?.localAvatar, lunLockedFacialExpression);
+	if (typeof updateLocalEditsUI === "function") {
+		updateLocalEditsUI();
+	}
+}
+
+function applyAllPlayersFacialExpression(exprKey) {
+	const selected = (typeof exprKey === "string" ? exprKey : lunLockedFacialExpression) || "none";
+	if (selected === "none" || lunAllPlayersFacialExpression === selected) {
+		lunAllPlayersFacialExpression = "none";
+	} else {
+		lunAllPlayersFacialExpression = selected;
+	}
+	if (gameState?.remotePlayers?.remotePlayers) {
+		for (const player of gameState.remotePlayers.remotePlayers.values()) {
+			const targetExpr = getRemotePlayerTargetExpression(player);
+			if (targetExpr) {
+				setAvatarFacialExpression(player?.avatar, targetExpr);
+			} else {
+				setAvatarFacialExpression(player?.avatar, lunAllPlayersFacialExpression);
 			}
 		}
 	}
@@ -4061,11 +4464,79 @@ function applyLockedFacialExpression(exprKey) {
 	}
 }
 
+function applyTargetPlayerFacialExpression(targetName, exprKey) {
+	const cleanLower = String(targetName || "").trim().toLowerCase();
+	if (!cleanLower) return 0;
+	const selected = (typeof exprKey === "string" ? exprKey : lunLockedFacialExpression) || "none";
+
+	const localName = (
+		(typeof gameState !== "undefined" && (gameState?.myPlayerName || gameState?.myStat?.name)) ||
+		document.querySelector(".sr-player-card__name")?.innerText ||
+		""
+	).trim().toLowerCase();
+	if (localName && localName === cleanLower) {
+		applyLockedFacialExpression(selected);
+		return 1;
+	}
+
+	if (selected === "none") {
+		lunTargetFacialExpressions.delete(cleanLower);
+	} else {
+		lunTargetFacialExpressions.set(cleanLower, selected);
+	}
+
+	let matched = 0;
+	if (gameState?.remotePlayers?.remotePlayers) {
+		for (const player of gameState.remotePlayers.remotePlayers.values()) {
+			const curName = (player?.info?.name || "").trim().toLowerCase();
+			const origName = (player?.info?.__spkmodOrigName || "").trim().toLowerCase();
+			if (curName === cleanLower || origName === cleanLower) {
+				if (selected === "none") {
+					if (curName) lunTargetFacialExpressions.delete(curName);
+					if (origName) lunTargetFacialExpressions.delete(origName);
+					setAvatarFacialExpression(player?.avatar, lunAllPlayersFacialExpression || "none");
+				} else {
+					setAvatarFacialExpression(player?.avatar, selected);
+				}
+				matched++;
+			}
+		}
+	}
+
+	if (typeof updateLocalEditsUI === "function") {
+		updateLocalEditsUI();
+	}
+	return matched;
+}
+
+function resetRemoteFacialExpressions() {
+	lunAllPlayersFacialExpression = "none";
+	lunTargetFacialExpressions.clear();
+	if (gameState?.remotePlayers?.remotePlayers) {
+		for (const player of gameState.remotePlayers.remotePlayers.values()) {
+			setAvatarFacialExpression(player?.avatar, "none");
+		}
+	}
+	if (typeof updateLocalEditsUI === "function") {
+		updateLocalEditsUI();
+	}
+}
+
 function maintainLockedFacialExpression() {
-	if (!lunLockedFacialExpression || lunLockedFacialExpression === "none") return;
-	const fe = gameState?.localAvatar?.faceExpression;
-	if (!fe) return;
-	if (typeof fe.beginOverride === "function") fe.beginOverride();
+	if (lunLockedFacialExpression && lunLockedFacialExpression !== "none") {
+		setAvatarFacialExpression(gameState?.localAvatar, lunLockedFacialExpression);
+	}
+	const hasAll = lunAllPlayersFacialExpression && lunAllPlayersFacialExpression !== "none";
+	const hasTargets = lunTargetFacialExpressions && lunTargetFacialExpressions.size > 0;
+	if ((hasAll || hasTargets) && gameState?.remotePlayers?.remotePlayers) {
+		for (const player of gameState.remotePlayers.remotePlayers.values()) {
+			const targetExpr = hasTargets ? getRemotePlayerTargetExpression(player) : null;
+			const exprToApply = targetExpr || (hasAll ? lunAllPlayersFacialExpression : null);
+			if (exprToApply && exprToApply !== "none") {
+				setAvatarFacialExpression(player?.avatar, exprToApply);
+			}
+		}
+	}
 }
 
 
@@ -4282,7 +4753,6 @@ function updateStatsModalLive() {
 }
 
 
-
 function updateDynamicStyles() {
 	let bgRule = "rgba(0, 0, 0, 0.75)";
 	let blurRule = "blur(4px)";
@@ -4422,6 +4892,20 @@ function updateDynamicStyles() {
 		localStorage.setItem("spkmod-hud-bg", lunHudBackground);
 	}
 
+	const activeFontStack = (typeof getSpkmodActiveFontStack === "function") ? getSpkmodActiveFontStack() : "";
+	const customFontRules = activeFontStack ? `
+		:root {
+			--sr-font: ${activeFontStack} !important;
+		}
+		body, #app,
+		input, button, textarea, select, .sr-input, .sr-btn,
+		#spkmod-hud, #spkmod-drag-btn,
+		[id^="spkmod-"], [id^="spkmod-"] *:not(code):not(pre):not(.spkmod-ql-masked),
+		.spkmod-avatar-dialog, .spkmod-avatar-dialog * {
+			font-family: ${activeFontStack} !important;
+		}
+	` : "";
+
 	const styleTag = document.getElementById("spkmod-dynamic-styles") || document.createElement("style");
 	styleTag.id = "spkmod-dynamic-styles";
 	styleTag.innerHTML = `
@@ -4431,6 +4915,7 @@ function updateDynamicStyles() {
 			--spkmod-blur: ${blurRule};
 			--spkmod-accent: ${lunAccentColor};
 		}
+		${customFontRules}
 				#app { filter: ${filterRule}; }
 		#app > *:not(.sr-game-canvas):not(canvas):not(.sr-click-ripple-layer) { zoom: ${lunGameUiScale} !important; }
 		#spkmod-hud, #spkmod-settings-modal, #spkmod-event-modal, #spkmod-patchnotes-modal, #spkmod-bbs-modal, #spkmod-info-modal, #spkmod-effects-modal, #spkmod-stats-modal, #spkmod-edits-modal, #spkmod-quests-modal { transform: scale(var(--spkmod-scale)); transform-origin: top left; }
@@ -4545,17 +5030,36 @@ document.head.appendChild(buildElement(
 			pointer-events: auto;
 		}
 		.sr-chatbox__body-text.spkmod-translated-line { color: #ffd54a !important; -webkit-text-fill-color: #ffd54a !important;  }
+		body.spkmod-chat-player-colors-on .sr-chatbox__sender.spkmod-colored-msg-el,
+		body.spkmod-chat-player-colors-on .sr-chatbox__body-text.spkmod-colored-msg-el:not(.spkmod-gmdt-line),
+		body.spkmod-chat-player-colors-on .sr-chatbox__body-text.spkmod-translated-line.spkmod-colored-msg-el {
+			color: var(--spkmod-msg-color) !important;
+			-webkit-text-fill-color: var(--spkmod-msg-color) !important;
+			text-shadow: 0 1px 2px rgba(0, 0, 0, 0.85) !important;
+		}
+		body.spkmod-chat-player-colors-on .sr-chatbox__sender.spkmod-friend-sender.spkmod-colored-msg-el {
+			text-shadow: 0 0 6px rgba(77, 208, 225, 0.45), 0 1px 2px rgba(0, 0, 0, 0.85) !important;
+		}
+		body.spkmod-chat-player-colors-on .sr-chatbox__sender.spkmod-party-sender.spkmod-colored-msg-el {
+			text-shadow: 0 0 6px rgba(105, 240, 174, 0.45), 0 1px 2px rgba(0, 0, 0, 0.85) !important;
+		}
+		body.spkmod-chat-player-colors-on .sr-chatbox__sender.spkmod-gm-sender.spkmod-colored-msg-el {
+			text-shadow: 0 0 6px rgba(255, 167, 38, 0.45), 0 1px 2px rgba(0, 0, 0, 0.85) !important;
+		}
 		.sr-chatbox__row.spkmod-mention-line {
 			background: rgba(255, 200, 0, 0.15) !important;
 			border-left: 3px solid #ffcc00 !important;
 		}
-		.sr-chatbox__row.spkmod-mention-line .sr-chatbox__body-text {
+		body .sr-chatbox__row.spkmod-mention-line .sr-chatbox__body-text {
 			font-weight: bold !important;
 			color: #fffacd !important;
+			-webkit-text-fill-color: #fffacd !important;
 			text-shadow: 1px 1px 2px #000, 0 0 4px #ffaa00 !important;
 		}
 		.sr-chatbox__body-text.spkmod-gmdt-line { font-weight: 800 !important; color: #ffa726 !important; -webkit-text-fill-color: #ffa726 !important; text-shadow: 0 0 6px rgba(255, 167, 38, 0.45) !important; }
 		.sr-chatbox__sender.spkmod-friend-sender { color: #4dd0e1 !important; -webkit-text-fill-color: #4dd0e1 !important; font-weight: bold !important; text-shadow: 0 0 6px rgba(77, 208, 225, 0.45) !important; }
+		.sr-chatbox__sender.spkmod-party-sender { color: #69f0ae !important; -webkit-text-fill-color: #69f0ae !important; font-weight: bold !important; text-shadow: 0 0 6px rgba(105, 240, 174, 0.45) !important; }
+		.sr-chatbox__sender.spkmod-gm-sender { color: #ffa726 !important; -webkit-text-fill-color: #ffa726 !important; font-weight: bold !important; text-shadow: 0 0 6px rgba(255, 167, 38, 0.45) !important; }
 		.sr-chatbox__body-text.spkmod-clickable-line { cursor: pointer !important; pointer-events: auto !important;}
 		#spkmod-footer {
 			border-top: 1px solid #DDD;
@@ -4626,10 +5130,13 @@ document.head.appendChild(buildElement(
 			flex-direction: column;
 			position: fixed;
 			z-index: 600000;
-			width: 480px;
-			max-width: 95vw;
-			max-height: 85vh;
-			overflow-y: auto;
+			width: max-content;
+			min-width: 520px;
+			max-width: none;
+			height: max-content;
+			max-height: none;
+			overflow: visible;
+			box-sizing: border-box;
 			color: #FFF;
 			background: #000C;
 			border: ${spkmodBorderWidth} solid #DDD;
@@ -4641,12 +5148,12 @@ document.head.appendChild(buildElement(
 		}
 		.spkmod-settings-grid {
 			display: grid;
-			grid-template-columns: 1fr 1fr;
+			grid-template-columns: max-content max-content;
 			gap: 10px;
 		}
 		@media (max-width: 500px) {
 			.spkmod-settings-grid {
-				grid-template-columns: 1fr;
+				grid-template-columns: max-content;
 			}
 		}
 		.spkmod-settings-col {
@@ -4657,6 +5164,13 @@ document.head.appendChild(buildElement(
 			border: 1px solid rgba(255, 255, 255, 0.08);
 			border-radius: 6px;
 			padding: 8px;
+		}
+		.spkmod-settings-col .spkmod-panel-cat {
+			gap: 8px;
+			justify-content: space-between;
+		}
+		.spkmod-settings-col .spkmod-panel-cat > span {
+			white-space: nowrap;
 		}
 		.spkmod-settings-section-title {
 			color: #ffd54a;
@@ -5913,7 +6427,6 @@ document.body.appendChild(
 					className: "spkmod-panel-btn",
 					style: "flex: 1; height: 28px; padding: 0; display: inline-flex; align-items: center; justify-content: center; font-size: 12pt; cursor: pointer;",
 					innerText: (typeof isGameMuted === "function" && isGameMuted()) ? "🔇" : "🔊",
-					title: (typeof isGameMuted === "function" && isGameMuted()) ? (t("unmuteBtnTooltip") || "Unmute Game") : (t("muteBtnTooltip") || "Mute Game"),
 					onclick: _ => {
 						if (typeof toggleGameMute === "function") toggleGameMute();
 					}
@@ -5923,7 +6436,6 @@ document.body.appendChild(
 					className: "spkmod-panel-btn",
 					style: "flex: 1; height: 28px; padding: 0; display: inline-flex; align-items: center; justify-content: center; font-size: 12pt; cursor: pointer;" + (window.lunInvisibilityActive ? " background: #5a2e2e !important;" : ""),
 					innerText: "👻",
-					title: t("invisibleBtn") || "Invisible Self",
 					onclick: _ => {
 						if (window.spkmodToggleInvisibility) window.spkmodToggleInvisibility();
 					}
@@ -5933,7 +6445,6 @@ document.body.appendChild(
 					className: "spkmod-panel-btn",
 					style: "flex: 1; height: 28px; padding: 0; display: inline-flex; align-items: center; justify-content: center; font-size: 12pt; cursor: pointer;",
 					innerText: "⚙️",
-					title: t("settingsBtnTooltip"),
 					onclick: _ => {
 						toggleSettingsModal();
 					}
@@ -5943,7 +6454,6 @@ document.body.appendChild(
 					className: "spkmod-panel-btn",
 					style: "flex: 1; height: 28px; padding: 0; display: inline-flex; align-items: center; justify-content: center; font-size: 12pt; cursor: pointer;",
 					innerText: "⌨️",
-					title: t("hotkeysModalTitle") || "Hotkeys",
 					onclick: _ => {
 						toggleHotkeysModal();
 					}
@@ -5953,7 +6463,6 @@ document.body.appendChild(
 					className: "spkmod-panel-btn",
 					style: "flex: 1; height: 28px; padding: 0; display: inline-flex; align-items: center; justify-content: center; font-size: 12pt; cursor: pointer;",
 					innerText: "📰",
-					title: t("patchNotesBtnTooltip"),
 					onclick: _ => {
 						togglePatchNotesModal();
 					}
@@ -5962,18 +6471,21 @@ document.body.appendChild(
 					id: "spkmod-bbs-btn",
 					className: "spkmod-panel-btn",
 					style: "flex: 1; height: 28px; padding: 0; display: inline-flex; align-items: center; justify-content: center; font-size: 12pt; cursor: pointer; position: relative;",
-					innerText: "💬",
-					title: t("bbsBtnTooltip") || "SpeakiBBS",
 					onclick: _ => {
 						if (typeof toggleBbsModal === "function") toggleBbsModal();
 					}
-				}),
+				}, [
+					buildElement("span", {
+						id: "spkmod-bbs-btn-icon",
+						style: "display: inline-flex; align-items: center; justify-content: center; pointer-events: none;",
+						innerHTML: renderSpkmodInlineEmojis(":t_280:", "height: 20px; width: 20px; object-fit: contain; display: block; pointer-events: none; user-select: none;")
+					})
+				]),
 				lunPanelElements.infoBtn = buildElement("button", {
 					id: "spkmod-info-btn",
 					className: "spkmod-panel-btn",
 					style: "flex: 1; height: 28px; padding: 0; display: inline-flex; align-items: center; justify-content: center; font-size: 12pt; cursor: pointer;",
 					innerText: "ℹ️",
-					title: t("infoBtnTooltip") === "infoBtnTooltip" ? "Info & News" : t("infoBtnTooltip"),
 					onclick: _ => {
 						toggleInfoModal();
 					}
@@ -5982,12 +6494,11 @@ document.body.appendChild(
 			buildElement("div", {
 				className: "spkmod-panel-cat"
 			}, [
-				buildElement("button", {
+				lunPanelElements.minigameBtn = buildElement("button", {
 					id: "spkmod-minigame-btn",
 					className: "spkmod-panel-btn",
 					style: "flex: 1; height: 28px; padding: 0; display: inline-flex; align-items: center; justify-content: center; font-size: 12pt; cursor: pointer;",
 					innerText: "🎮",
-					title: t("eventInfoBtnTooltip"),
 					onclick: () => {
 						lunHudElements.eventModal.classList.add("hidden");
 						window.gameState.onNpcInteract("minigame")
@@ -5998,7 +6509,6 @@ document.body.appendChild(
 					className: "spkmod-panel-btn",
 					style: "flex: 1; height: 28px; padding: 0; display: inline-flex; align-items: center; justify-content: center; font-size: 12pt; cursor: pointer;",
 					innerText: "🎉",
-					title: t("eventInfoBtnTooltip"),
 					onclick: _ => {
 						toggleEventModal();
 					}
@@ -6008,7 +6518,6 @@ document.body.appendChild(
 					className: "spkmod-panel-btn",
 					style: "flex: 1; height: 28px; padding: 0; display: inline-flex; align-items: center; justify-content: center; font-size: 12pt; cursor: pointer;",
 					innerText: "🗺️",
-					title: t("mapModalTitle"),
 					onclick: _ => {
 						toggleMapModal();
 					}
@@ -6018,7 +6527,6 @@ document.body.appendChild(
 					className: "spkmod-panel-btn",
 					style: "flex: 1; height: 28px; padding: 0; display: inline-flex; align-items: center; justify-content: center; font-size: 12pt; cursor: pointer;",
 					innerText: "⏱️",
-					title: t("statsBtnTooltip"),
 					onclick: _ => {
 						toggleStatsModal();
 					}
@@ -6028,7 +6536,6 @@ document.body.appendChild(
 					className: "spkmod-panel-btn",
 					style: "flex: 1; height: 28px; padding: 0; display: inline-flex; align-items: center; justify-content: center; font-size: 12pt; cursor: pointer; position: relative;",
 					innerText: "📋",
-					title: t("questsBtnTooltip") || "Quests Checklist",
 					onclick: _ => {
 						if (typeof toggleQuestsModal === "function") toggleQuestsModal();
 					}
@@ -6038,7 +6545,6 @@ document.body.appendChild(
 					className: "spkmod-panel-btn",
 					style: "flex: 1; height: 28px; padding: 0; display: inline-flex; align-items: center; justify-content: center; font-size: 12pt; cursor: grab;",
 					innerText: "⚓",
-					title: t("dragMenuTooltip"),
 					ondblclick: (e) => {
 						const isLocked = lunHudElements.hud.dataset.spkmodLocked === "true";
 						if (isLocked) {
@@ -6052,12 +6558,18 @@ document.body.appendChild(
 							e.target.style.cursor = "not-allowed";
 							if (window.localStorage) localStorage.setItem("spkmod-hud-locked", "true");
 						}
+						if (typeof updateHudIconTooltips === "function") {
+							updateHudIconTooltips();
+						}
 					}
 				})
 			])
 		])
 	])
 );
+if (typeof updateHudIconTooltips === "function") {
+	updateHudIconTooltips();
+}
 
 
 let lastPinnedQuestTap = 0;
@@ -6240,6 +6752,32 @@ document.body.appendChild(
 					})
 				]),
 				buildElement("div", { className: "spkmod-panel-cat" }, [
+					lunPanelElements.partyChatToggleLabel = buildElement("span", {
+						style: "color: #fff; font-size: 11px; font-weight: bold; user-select: none; flex: 1;",
+						innerText: (function() { const s = t("partyChatToggleLabel"); return (!s || s === "partyChatToggleLabel") ? "Highlight Party Members in Chat" : s; })()
+					}),
+					lunPanelElements.partyChatToggleInput = buildElement("input", {
+						type: "checkbox",
+						checked: lunPartyChatHighlightEnabled,
+						onchange: e => {
+							setPartyChatHighlightEnabled(e.target.checked);
+						}
+					})
+				]),
+				buildElement("div", { className: "spkmod-panel-cat" }, [
+					lunPanelElements.chatRandomColorsLabel = buildElement("span", {
+						style: "color: #fff; font-size: 11px; font-weight: bold; user-select: none; flex: 1;",
+						innerText: (function() { const s = t("chatRandomColorsToggleLabel"); return (!s || s === "chatRandomColorsToggleLabel") ? "Colorize Player Messages" : s; })()
+					}),
+					lunPanelElements.chatRandomColorsToggleInput = buildElement("input", {
+						type: "checkbox",
+						checked: lunChatRandomColorsEnabled,
+						onchange: e => {
+							setChatRandomColorsEnabled(e.target.checked);
+						}
+					})
+				]),
+				buildElement("div", { className: "spkmod-panel-cat" }, [
 					lunPanelElements.mentionAlertToggleLabel = buildElement("span", {
 						style: "color: #fff; font-size: 11px; font-weight: bold; user-select: none; flex: 1;",
 						innerText: t("mentionAlertToggleLabel")
@@ -6316,7 +6854,7 @@ document.body.appendChild(
 				]),
 				lunPanelElements.translateEmailInfo = buildElement("div", {
 					className: "hidden",
-					style: "color: #aaa; font-size: 10px; line-height: 1.4; padding: 2px 4px 6px;",
+					style: "contain: inline-size; width: 100%; box-sizing: border-box; color: #aaa; font-size: 10px; line-height: 1.4; padding: 2px 4px 6px;",
 					innerText: t("translateEmailTooltip")
 				}),
 				buildElement("div", { className: "spkmod-panel-cat" }, [
@@ -6463,16 +7001,6 @@ document.body.appendChild(
 					} })
 				]),
 				buildElement("div", { className: "spkmod-panel-cat" }, [
-					lunPanelElements.telemetryToggleLabel = buildElement("span", { style: "color: #fff; font-size: 11px; font-weight: bold; flex: 1;", innerText: t("telemetrySettingLabel") }),
-					lunPanelElements.telemetryToggleInput = buildElement("input", { type: "checkbox", checked: (window.localStorage && localStorage.getItem("spkmod-telemetry-consent") === "granted"), onchange: e => {
-						const granted = e.target.checked;
-						if (window.localStorage) localStorage.setItem("spkmod-telemetry-consent", granted ? "granted" : "denied");
-						if (granted && typeof window.spkmodSendTelemetryPing === "function") {
-							window.spkmodSendTelemetryPing();
-						}
-					} })
-				]),
-				buildElement("div", { className: "spkmod-panel-cat" }, [
 					lunPanelElements.speedometerToggleLabel = buildElement("span", { style: "color: #fff; font-size: 11px; font-weight: bold; flex: 1;", innerText: t("speedometerToggleLabel") }),
 					lunPanelElements.speedometerToggleInput = buildElement("input", { type: "checkbox", checked: lunSpeedometerEnabled, onchange: e => {
 						lunSpeedometerEnabled = e.target.checked;
@@ -6596,6 +7124,58 @@ document.body.appendChild(
 					})
 				]),
 				buildElement("div", { className: "spkmod-panel-cat" }, [
+					lunPanelElements.fontPresetLabel = buildElement("span", { style: "color: #fff; font-size: 11px; font-weight: bold; flex: 1;", innerText: t("fontPresetLabel") || "Game Font" }),
+					lunPanelElements.fontPresetSelect = buildElement("select", {
+						className: "spkmod-panel-combo",
+						value: lunFontPreset,
+						onchange: e => {
+							const val = e.target.value;
+							if (lunPanelElements.customFontContainer) {
+								if (val === "custom") lunPanelElements.customFontContainer.classList.remove("hidden");
+								else lunPanelElements.customFontContainer.classList.add("hidden");
+							}
+							if (typeof applySpkmodFont === "function") {
+								applySpkmodFont(val, lunPanelElements.customFontInput ? lunPanelElements.customFontInput.value : lunCustomFont, true);
+							}
+						}
+					}, [
+						buildElement("option", { value: "default", innerText: t("fontPresetDefault") || "Default", selected: lunFontPreset === "default" }),
+						buildElement("option", { value: "trickcalPop", innerText: t("fontPresetTrickcalPop") || "Pop (Auto CJK)", selected: lunFontPreset === "trickcalPop" }),
+						buildElement("option", { value: "oneMobilePop", innerText: "ONE Mobile POP", selected: lunFontPreset === "oneMobilePop" }),
+						buildElement("option", { value: "dfpPop", innerText: "DFP-Pop1-W9", selected: lunFontPreset === "dfpPop" }),
+						buildElement("option", { value: "mochiyPop", innerText: "Mochiy Pop One", selected: lunFontPreset === "mochiyPop" }),
+						buildElement("option", { value: "knBobohei", innerText: "KNBobohei Bold", selected: lunFontPreset === "knBobohei" }),
+						buildElement("option", { value: "serif", innerText: t("fontPresetSerif") || "Serif (Mincho)", selected: lunFontPreset === "serif" }),
+						buildElement("option", { value: "rounded", innerText: t("fontPresetRounded") || "Rounded (Maru)", selected: lunFontPreset === "rounded" }),
+						buildElement("option", { value: "pixel", innerText: t("fontPresetPixel") || "Pixel / Retro", selected: lunFontPreset === "pixel" }),
+						buildElement("option", { value: "monospace", innerText: t("fontPresetMonospace") || "Monospace", selected: lunFontPreset === "monospace" }),
+						buildElement("option", { value: "custom", innerText: t("fontPresetCustom") || "Custom OS Font...", selected: lunFontPreset === "custom" })
+					])
+				]),
+				lunPanelElements.customFontContainer = buildElement("div", {
+					className: "spkmod-panel-cat" + (lunFontPreset === "custom" ? "" : " hidden"),
+					style: "margin-top: 2px;"
+				}, [
+					lunPanelElements.customFontInputLabel = buildElement("span", { style: "color: #aaa; font-size: 10px; flex: 1;", innerText: t("customFontInputLabel") || "Font:" }),
+					lunPanelElements.customFontInput = buildElement("input", {
+						type: "text",
+						value: lunCustomFont,
+						placeholder: t("customFontPlaceholder") || "Meiryo, Yu Mincho...",
+						style: "width: 115px; background: #222; color: #fff; border: 1px solid #444; border-radius: 3px; font-size: 10px; padding: 2px;",
+						oninput: e => {
+							const v = e.target.value;
+							lunCustomFont = v;
+							if (window.localStorage) localStorage.setItem("spkmod-custom-font", v);
+							if (window.__spkmodCustomFontInputDebounce) clearTimeout(window.__spkmodCustomFontInputDebounce);
+							window.__spkmodCustomFontInputDebounce = setTimeout(() => {
+								if (typeof applySpkmodFont === "function") {
+									applySpkmodFont("custom", v, true);
+								}
+							}, 250);
+						}
+					})
+				]),
+				buildElement("div", { className: "spkmod-panel-cat" }, [
 					lunPanelElements.accentColorLabel = buildElement("span", { style: "color: #fff; font-size: 11px; font-weight: bold; flex: 1;", innerText: t("accentColorLabel") }),
 					lunPanelElements.accentColorInput = buildElement("input", { type: "color", value: lunAccentColor, style: "width: 40px; height: 20px; padding: 0; border: none; background: none; cursor: pointer;", onchange: e => { lunAccentColor = e.target.value; updateDynamicStyles(); } }),
 					lunPanelElements.accentColorConfirmBtn = buildElement("button", { className: "spkmod-panel-btn", style: "padding: 0px 4px; font-size: 10px; margin-left: 4px;", innerText: t("confirmBtn") || "OK", onclick: () => { lunAccentColor = lunPanelElements.accentColorInput.value; updateDynamicStyles(); } })
@@ -6674,7 +7254,7 @@ document.body.appendChild(
 		]),
 
 		lunPanelElements.creditsLabel = buildElement("div", {
-			style: "color: #aaa; font-size: 10px; margin-top: 4px; white-space: pre-wrap; line-height: 1.4; border-top: 1px solid #555; padding-top: 4px; user-select: none; cursor: pointer;",
+			style: "contain: inline-size; width: 100%; box-sizing: border-box; color: #aaa; font-size: 10px; margin-top: 4px; white-space: pre-wrap; line-height: 1.4; border-top: 1px solid #555; padding-top: 4px; user-select: none; cursor: pointer;",
 			innerText: t("credits"),
 			onclick: _ => {
 				const now = Date.now();
@@ -6716,6 +7296,8 @@ let lunEmojiTab = "standard";
 const LUN_EMOJIS = ["👍","👎","👋","🙏","👏","🙌","🤝","😊","😂","🤣","😍","😎","🤔","😅","😭","🥺","🔥","💯","❤️","✨","🎉","💀","👀","🗣️","💰","💎","🟣","⭐","❌","✅", "💪", "🤷", "🤦", "🎈", "🎂", "🥳", "🙄", "🤐", "🥵", "🥶", "🤯", "😴", "🤮", "🤡", "👻", "👽", "💩", "🤖", "🎃"];
 let lunEmojiFreq = JSON.parse((window.localStorage && localStorage.getItem("spkmod-emoji-freq")) || "{}");
 let lunEmojiFavorites = JSON.parse((window.localStorage && localStorage.getItem("spkmod-emoji-fav")) || "[]");
+let lunEmojiSize = parseInt((window.localStorage && localStorage.getItem("spkmod-emoji-size")) || "35", 10);
+if (isNaN(lunEmojiSize) || lunEmojiSize < 20 || lunEmojiSize > 80) lunEmojiSize = 35;
 
 function toggleFavoriteEmoji(id) {
     if (lunEmojiFavorites.includes(id)) {
@@ -6750,6 +7332,11 @@ function loadEmojiCatalogFile(url, targetObj) {
         if (typeof renderBbsPosts === "function" && typeof lunHudElements !== "undefined" && lunHudElements && lunHudElements.bbsModal && !lunHudElements.bbsModal.classList.contains("hidden")) {
             renderBbsPosts();
         }
+        if (typeof updateBbsI18n === "function") updateBbsI18n();
+        const bbsIconSpan = document.getElementById("spkmod-bbs-btn-icon");
+        if (bbsIconSpan && typeof renderSpkmodInlineEmojis === "function") {
+            bbsIconSpan.innerHTML = renderSpkmodInlineEmojis(":t_280:", "height: 20px; width: 20px; object-fit: contain; display: block; pointer-events: none; user-select: none;");
+        }
     };
     fetch(url).then(res => {
         if (!res.ok) throw new Error("HTTP " + res.status);
@@ -6773,6 +7360,172 @@ loadEmojiCatalogFile("https://raw.githubusercontent.com/DJTOMATO/SpeakiRPG/main/
 
 var lunTrickcal3Emojis = {};
 loadEmojiCatalogFile("https://raw.githubusercontent.com/DJTOMATO/SpeakiRPG/main/emojis4.txt", lunTrickcal3Emojis);
+
+function renderSpkmodInlineEmojis(text, imgStyle) {
+    if (!text || typeof text !== "string") return "";
+    const escaped = text
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;");
+    const spkmodAllEmojis = {
+        t_280: "https://i.imgur.com/tCrOOr5.png",
+        SPK_88: "https://i.imgur.com/6H1r2Vz.gif",
+        ...(typeof lunCustomEmojis !== "undefined" ? lunCustomEmojis : {}),
+        ...(typeof lunTrickcalEmojis !== "undefined" ? lunTrickcalEmojis : {}),
+        ...(typeof lunTrickcal2Emojis !== "undefined" ? lunTrickcal2Emojis : {}),
+        ...(typeof lunTrickcal3Emojis !== "undefined" ? lunTrickcal3Emojis : {})
+    };
+    const styleAttr = imgStyle || "height: 1.35em; width: 1.35em; object-fit: contain; vertical-align: middle; margin-right: 2px; display: inline-block; pointer-events: none; user-select: none;";
+    return escaped.replace(/:([a-zA-Z0-9_+-]+):/g, (match, ename) => {
+        const eurl = spkmodAllEmojis[ename];
+        if (!eurl) return match;
+        return `<img src="${eurl}" alt=":${ename}:" draggable="false" style="${styleAttr}" onerror="this.onerror=null; this.style.opacity='0.4';">`;
+    });
+}
+window.renderSpkmodInlineEmojis = renderSpkmodInlineEmojis;
+
+function spkmodIsTouchOrMobile() {
+    if (typeof spkmodIsMobile === "function" && spkmodIsMobile()) return true;
+    if (typeof window.speakiMobile !== "undefined") return true;
+    if (typeof window.matchMedia === "function" && window.matchMedia("(pointer: coarse)").matches && (typeof navigator !== "undefined" && navigator.maxTouchPoints > 0)) return true;
+    return false;
+}
+
+function ensureSpkmodRichTooltipEl() {
+    let el = document.getElementById("spkmod-rich-tooltip");
+    if (!el && document.body) {
+        el = document.createElement("div");
+        el.id = "spkmod-rich-tooltip";
+        el.style.cssText = "position: fixed; z-index: 2147483647; pointer-events: none; display: none; align-items: center; gap: 5px; background: rgba(15, 23, 42, 0.96); color: #f8fafc; border: 1px solid var(--spkmod-accent, #ffd54a); border-radius: 6px; padding: 4px 8px; font-size: 11px; font-weight: bold; box-shadow: 0 4px 12px rgba(0,0,0,0.65); white-space: nowrap; transform: translate(-50%, -100%);";
+        document.body.appendChild(el);
+    }
+    return el;
+}
+
+function setSpkmodRichTooltip(elem, rawText) {
+    if (!elem) return;
+    elem.removeAttribute("title");
+    elem.dataset.spkRichTooltip = rawText || "";
+    if (!elem.__spkRichTooltipBound) {
+        elem.__spkRichTooltipBound = true;
+        const showTip = (e) => {
+            // Never display hover tooltips on mobile or touch devices
+            if (spkmodIsTouchOrMobile()) return;
+            if (e && e.pointerType === "touch") return;
+
+            const txt = elem.dataset.spkRichTooltip;
+            if (!txt) return;
+            const tip = ensureSpkmodRichTooltipEl();
+            if (!tip) return;
+            tip.innerHTML = renderSpkmodInlineEmojis(txt, "height: 16px; width: 16px; object-fit: contain; vertical-align: middle; display: inline-block; pointer-events: none; user-select: none;");
+            tip.style.display = "inline-flex";
+            const rect = elem.getBoundingClientRect();
+            let left = rect.left + rect.width / 2;
+            let top = rect.top - 6;
+            tip.style.transform = "translate(-50%, -100%)";
+            if (top < 30) {
+                top = rect.bottom + 6;
+                tip.style.transform = "translate(-50%, 0)";
+            }
+            const tipWidth = tip.offsetWidth || 80;
+            left = Math.max(tipWidth / 2 + 6, Math.min(window.innerWidth - tipWidth / 2 - 6, left));
+            tip.style.left = left + "px";
+            tip.style.top = top + "px";
+        };
+        const hideTip = () => {
+            const tip = document.getElementById("spkmod-rich-tooltip");
+            if (tip) tip.style.display = "none";
+        };
+        elem.addEventListener("mouseenter", showTip);
+        elem.addEventListener("mouseleave", hideTip);
+        elem.addEventListener("pointerdown", hideTip);
+        elem.addEventListener("touchstart", hideTip, { passive: true });
+        elem.addEventListener("blur", hideTip);
+    }
+}
+window.setSpkmodRichTooltip = setSpkmodRichTooltip;
+
+function updateHudIconTooltips() {
+    if (typeof setSpkmodRichTooltip !== "function" || typeof lunPanelElements === "undefined" || !lunPanelElements) return;
+
+    // 1. Mute button
+    if (lunPanelElements.muteBtn) {
+        const muted = typeof isGameMuted === "function" && isGameMuted();
+        const icon = muted ? "🔇" : "🔊";
+        const tip = muted ? (t("unmuteBtnTooltip") || "Unmute Game") : (t("muteBtnTooltip") || "Mute Game");
+        setSpkmodRichTooltip(lunPanelElements.muteBtn, icon + " " + tip);
+    }
+
+    // 2. Invisible button
+    if (lunPanelElements.invisibleBtn) {
+        const raw = t("invisibleBtn") || "Invisible Self";
+        const clean = raw.replace(/^👻\s*/, '');
+        setSpkmodRichTooltip(lunPanelElements.invisibleBtn, "👻 " + clean);
+    }
+
+    // 3. Settings button
+    if (lunPanelElements.settingsBtn) {
+        setSpkmodRichTooltip(lunPanelElements.settingsBtn, "⚙️ " + (t("settingsBtnTooltip") || "Settings (F2)"));
+    }
+
+    // 4. Hotkeys button
+    if (lunPanelElements.hotkeysBtn) {
+        setSpkmodRichTooltip(lunPanelElements.hotkeysBtn, "⌨️ " + (t("hotkeysModalTitle") || "Hotkeys"));
+    }
+
+    // 5. Patch Notes button
+    if (lunPanelElements.patchNotesBtn) {
+        setSpkmodRichTooltip(lunPanelElements.patchNotesBtn, "📰 " + (t("patchNotesBtnTooltip") || "Game Patch Notes"));
+    }
+
+    // 6. BBS / DarkNet button
+    if (lunPanelElements.bbsBtn) {
+        const rawTip = t("bbsBtnTooltip");
+        const tipStr = (!rawTip || rawTip === "bbsBtnTooltip") ? ":t_280: DarkNet" : (rawTip.includes(":t_280:") ? rawTip : ":t_280: " + rawTip);
+        setSpkmodRichTooltip(lunPanelElements.bbsBtn, tipStr);
+    }
+
+    // 7. Info button
+    if (lunPanelElements.infoBtn) {
+        const tip = t("infoBtnTooltip");
+        const clean = (!tip || tip === "infoBtnTooltip") ? "Info & News" : tip;
+        setSpkmodRichTooltip(lunPanelElements.infoBtn, "ℹ️ " + clean.replace(/^ℹ️\s*/, ''));
+    }
+
+    // 8. Minigame button
+    if (lunPanelElements.minigameBtn) {
+        setSpkmodRichTooltip(lunPanelElements.minigameBtn, "🎮 " + (t("eventMinigameTitle") || "Minigame"));
+    }
+
+    // 9. Event button
+    if (lunPanelElements.eventBtn) {
+        setSpkmodRichTooltip(lunPanelElements.eventBtn, "🎉 " + (t("eventInfoBtnTooltip") || "Event Info"));
+    }
+
+    // 10. Map button
+    if (lunPanelElements.mapBtn) {
+        setSpkmodRichTooltip(lunPanelElements.mapBtn, "🗺️ " + (t("mapModalTitle") || "World Map"));
+    }
+
+    // 11. Stats button
+    if (lunPanelElements.statsBtn) {
+        setSpkmodRichTooltip(lunPanelElements.statsBtn, "⏱️ " + (t("statsBtnTooltip") || "Session Stats & Tracker"));
+    }
+
+    // 12. Quests button
+    if (lunPanelElements.questsBtn) {
+        setSpkmodRichTooltip(lunPanelElements.questsBtn, "📋 " + (t("questsBtnTooltip") || "Quests Checklist"));
+    }
+
+    // 13. Drag / Lock button
+    if (lunPanelElements.dragBtn) {
+        const isLocked = lunHudElements && lunHudElements.hud && lunHudElements.hud.dataset.spkmodLocked === "true";
+        const tip = t("dragMenuTooltip") || "Drag Menu";
+        setSpkmodRichTooltip(lunPanelElements.dragBtn, (isLocked ? "🔒 " : "⚓ ") + tip);
+    }
+}
+window.updateHudIconTooltips = updateHudIconTooltips;
 
 function parseCustomEmojisToHtml(html) {
     if (!html || typeof html !== "string") return html;
@@ -6842,7 +7595,7 @@ function createSpeakiAvatarController({ document, store, getPlayer, getCatalog, 
 		.sr-player-card__portrait-wrap > .sr-player-card__class-badge { z-index:2; }
 		.spkmod-avatar-button:focus-visible { outline:3px solid #ffd54a; outline-offset:3px; }
 		.spkmod-avatar-button img, .spkmod-avatar-preview img, .spkmod-avatar-choice img { display:block; width:100%; height:100%; object-fit:cover; object-position:center; border-radius:50%; }
-		.spkmod-avatar-dialog { box-sizing:border-box; width:min(480px, calc(100vw - 28px)); max-height:85vh; padding:20px; color:#f8fafc; background:#172033; border:1px solid #475569; border-radius:16px; font:14px/1.5 sans-serif; box-shadow:0 20px 60px #0008; }
+		.spkmod-avatar-dialog { box-sizing:border-box; width:min(480px, calc(100vw - 28px)); max-height:85vh; padding:20px; color:#f8fafc; background:#172033; border:1px solid #475569; border-radius:16px; font:14px/1.5 sans-serif; box-shadow:0 20px 60px #0008; overscroll-behavior:contain; overflow-y:auto; }
 		.spkmod-avatar-dialog::backdrop { background:#0008; }
 		.spkmod-avatar-dialog h2 { margin:0; font-size:20px; }
 		.spkmod-avatar-dialog p { color:#bac6d8; margin:8px 0 16px; }
@@ -6854,7 +7607,7 @@ function createSpeakiAvatarController({ document, store, getPlayer, getCatalog, 
 		.spkmod-avatar-tabs, .spkmod-avatar-actions { display:flex; gap:8px; flex-wrap:wrap; margin:12px 0; }
 		.spkmod-avatar-dialog button[aria-pressed="true"] { border-color:#ffd54a; background:#51462b; }
 		.spkmod-avatar-search { box-sizing:border-box; width:100%; padding:9px 12px; border-radius:8px; border:1px solid #52627b; background:#0f172a; color:inherit; }
-		.spkmod-avatar-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(56px,1fr)); gap:10px; max-height:240px; overflow-y:auto; padding:6px; margin-top:12px; }
+		.spkmod-avatar-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(56px,1fr)); gap:10px; max-height:240px; overflow-y:auto; padding:6px; margin-top:12px; overscroll-behavior:contain; }
 		.spkmod-avatar-grid .spkmod-avatar-choice { padding:0; width:56px; height:56px; border-radius:50%; overflow:hidden; border:2px solid transparent; background:#334155; }
 		.spkmod-avatar-status { min-height:1.5em; color:#fcd34d; margin-top:8px; }
 		.spkmod-avatar-actions { justify-content:flex-end; margin-bottom:0; }
@@ -6994,6 +7747,20 @@ function createSpeakiAvatarController({ document, store, getPlayer, getCatalog, 
 			}
 		};
 		modal.addEventListener("cancel", e => { e.preventDefault(); close(); });
+		// Prevent wheel/touch inside the avatar dialog from zooming the game camera
+		const scrollDelta = (e) => (e.deltaMode === 1 ? e.deltaY * 33 : (e.deltaMode === 2 ? e.deltaY * window.innerHeight : e.deltaY));
+		modal.addEventListener("wheel", (e) => {
+			e.stopPropagation();
+			if (grid && e.target !== grid && !grid.contains(e.target)) {
+				grid.scrollTop += scrollDelta(e);
+			}
+		}, { passive: true });
+		modal.addEventListener("touchmove", (e) => e.stopPropagation(), { passive: true });
+		modal.addEventListener("mousedown", (e) => e.stopPropagation());
+		modal.addEventListener("pointerdown", (e) => e.stopPropagation());
+		grid.addEventListener("wheel", (e) => e.stopPropagation(), { passive: true });
+		grid.addEventListener("touchmove", (e) => e.stopPropagation(), { passive: true });
+
 		// Keep typing and Escape inside the dialog rather than triggering game/mod shortcuts.
 		modal.addEventListener("keydown", e => {
 			e.stopPropagation();
@@ -7076,6 +7843,20 @@ function toggleEmojiPicker(anchorBtn) {
     const defaultW = isMobile ? "360px" : "420px";
     const defaultH = isMobile ? "320px" : "420px";
     lunEmojiPickerPanel.style.cssText = `position: fixed; width: ${defaultW}; height: ${defaultH}; max-width: 95vw; max-height: 80vh; min-width: 200px; min-height: 150px; resize: both; overflow: hidden; background: rgba(20, 20, 20, 0.95); border: 1px solid #555; border-radius: 6px; padding: 6px; display: flex; flex-direction: column; gap: 4px; z-index: 9999999; box-shadow: 0 4px 12px rgba(0,0,0,0.5); pointer-events: auto;`;
+    const emojiSizeKey = "spkmod-size-spkmod-emoji-picker-v2";
+
+    try {
+        const savedSize = window.localStorage && localStorage.getItem(emojiSizeKey);
+        if (savedSize) {
+            const parsedSize = JSON.parse(savedSize);
+            const sw = parseInt(parsedSize && parsedSize.width, 10);
+            const sh = parseInt(parsedSize && parsedSize.height, 10);
+            if (!isNaN(sw) && !isNaN(sh)) {
+                lunEmojiPickerPanel.style.width = Math.max(200, Math.min(Math.round(window.innerWidth * 0.95), sw)) + "px";
+                lunEmojiPickerPanel.style.height = Math.max(150, Math.min(Math.round(window.innerHeight * 0.8), sh)) + "px";
+            }
+        }
+    } catch (_) {}
     
     if (!(window.localStorage && localStorage.getItem("spkmod-pos-spkmod-emoji-picker-v2"))) {
         if (isMobile) {
@@ -7118,6 +7899,23 @@ function toggleEmojiPicker(anchorBtn) {
 
     renderEmojiGrid();
     document.body.appendChild(lunEmojiPickerPanel);
+
+    if (typeof ResizeObserver !== "undefined" && window.localStorage) {
+        const panelEl = lunEmojiPickerPanel;
+        const cs = getComputedStyle(panelEl);
+        let lastW = Math.round(parseFloat(cs.width)) || 0;
+        let lastH = Math.round(parseFloat(cs.height)) || 0;
+        const sizeObserver = new ResizeObserver(() => {
+            if (!panelEl.isConnected) { sizeObserver.disconnect(); return; }
+            const c = getComputedStyle(panelEl);
+            const w = Math.round(parseFloat(c.width));
+            const h = Math.round(parseFloat(c.height));
+            if (!w || !h || (w === lastW && h === lastH)) return;
+            lastW = w; lastH = h;
+            try { localStorage.setItem(emojiSizeKey, JSON.stringify({ width: w, height: h })); } catch (_) {}
+        });
+        sizeObserver.observe(panelEl);
+    }
     
     const closeHandler = (e) => {
         if (!lunEmojiPickerPanel) return;
@@ -7243,7 +8041,41 @@ function renderEmojiGrid() {
     btnFav.onclick = (e) => { lunEmojiTab = 'fav'; renderEmojiGrid(); };
     header.appendChild(btnFav);
 
+    const btnSizePlus = document.createElement("button");
+    btnSizePlus.innerText = "+";
+    btnSizePlus.title = t("emojiSizeIncreaseTooltip") || "Increase emoji size (+)";
+    btnSizePlus.style.cssText = `flex: 0 0 22px; width: 22px; padding: 2px 0; cursor: ${lunEmojiSize >= 80 ? 'default' : 'pointer'}; border-radius: 4px; background: rgba(255,255,255,0.08); border: 1px solid #555; color: #fff; font-size: 13px; font-weight: bold; display: inline-flex; align-items: center; justify-content: center; line-height: 1; user-select: none; opacity: ${lunEmojiSize >= 80 ? '0.4' : '1'};`;
+    btnSizePlus.onmouseenter = () => { if (lunEmojiSize < 80) btnSizePlus.style.background = "rgba(255,255,255,0.2)"; };
+    btnSizePlus.onmouseleave = () => { if (lunEmojiSize < 80) btnSizePlus.style.background = "rgba(255,255,255,0.08)"; };
+    btnSizePlus.onclick = (e) => {
+        e.stopPropagation();
+        if (lunEmojiSize >= 80) return;
+        lunEmojiSize = Math.min(80, (lunEmojiSize || 35) + 5);
+        if (window.localStorage) localStorage.setItem("spkmod-emoji-size", String(lunEmojiSize));
+        renderEmojiGrid();
+    };
+
+    const btnSizeMinus = document.createElement("button");
+    btnSizeMinus.innerText = "−";
+    btnSizeMinus.title = t("emojiSizeDecreaseTooltip") || "Decrease emoji size (−)";
+    btnSizeMinus.style.cssText = `flex: 0 0 22px; width: 22px; padding: 2px 0; cursor: ${lunEmojiSize <= 20 ? 'default' : 'pointer'}; border-radius: 4px; background: rgba(255,255,255,0.08); border: 1px solid #555; color: #fff; font-size: 13px; font-weight: bold; display: inline-flex; align-items: center; justify-content: center; line-height: 1; user-select: none; opacity: ${lunEmojiSize <= 20 ? '0.4' : '1'};`;
+    btnSizeMinus.onmouseenter = () => { if (lunEmojiSize > 20) btnSizeMinus.style.background = "rgba(255,255,255,0.2)"; };
+    btnSizeMinus.onmouseleave = () => { if (lunEmojiSize > 20) btnSizeMinus.style.background = "rgba(255,255,255,0.08)"; };
+    btnSizeMinus.onclick = (e) => {
+        e.stopPropagation();
+        if (lunEmojiSize <= 20) return;
+        lunEmojiSize = Math.max(20, (lunEmojiSize || 35) - 5);
+        if (window.localStorage) localStorage.setItem("spkmod-emoji-size", String(lunEmojiSize));
+        renderEmojiGrid();
+    };
+
+    header.appendChild(btnSizePlus);
+    header.appendChild(btnSizeMinus);
+
     grid.innerHTML = "";
+    const curCustomSize = lunEmojiSize || 35;
+    const curStdSize = Math.max(16, curCustomSize - 4);
+    const curStdFontSize = Math.max(12, Math.round(curCustomSize * 0.55));
     
     if (lunEmojiTab === 'fav') {
         if (lunEmojiFavorites.length === 0) {
@@ -7266,7 +8098,7 @@ function renderEmojiGrid() {
                     btn.title = `:${name}:`;
                     btn.className = "spkmod-custom-emoji";
                     btn.setAttribute("data-url", url);
-                    btn.style.cssText = "width: 35px; height: 35px; background: rgba(255,255,255,0.1); border: 1px solid transparent; border-radius: 4px; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: background 0.1s; padding: 2px;";
+                    btn.style.cssText = `width: ${curCustomSize}px; height: ${curCustomSize}px; background: rgba(255,255,255,0.1); border: 1px solid transparent; border-radius: 4px; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: background 0.1s; padding: 2px;`;
                     btn.onmouseenter = () => btn.style.background = "rgba(255,255,255,0.2)";
                     btn.onmouseleave = () => btn.style.background = "rgba(255,255,255,0.1)";
                     const img = document.createElement("img");
@@ -7278,7 +8110,7 @@ function renderEmojiGrid() {
                     };
                 } else {
                     btn.innerText = id;
-                    btn.style.cssText = "width: 31px; height: 31px; background: rgba(255,255,255,0.1); border: 1px solid transparent; border-radius: 4px; cursor: pointer; font-size: 19px; display: flex; align-items: center; justify-content: center; transition: background 0.1s;";
+                    btn.style.cssText = `width: ${curStdSize}px; height: ${curStdSize}px; background: rgba(255,255,255,0.1); border: 1px solid transparent; border-radius: 4px; cursor: pointer; font-size: ${curStdFontSize}px; display: flex; align-items: center; justify-content: center; transition: background 0.1s;`;
                     btn.onmouseenter = () => btn.style.background = "rgba(255,255,255,0.2)";
                     btn.onmouseleave = () => btn.style.background = "rgba(255,255,255,0.1)";
                     btn.onclick = (e) => {
@@ -7299,7 +8131,7 @@ function renderEmojiGrid() {
         sorted.forEach(emoji => {
             const btn = document.createElement("button");
             btn.innerText = emoji;
-            btn.style.cssText = "width: 31px; height: 31px; background: rgba(255,255,255,0.1); border: 1px solid transparent; border-radius: 4px; cursor: pointer; font-size: 19px; display: flex; align-items: center; justify-content: center; transition: background 0.1s;";
+            btn.style.cssText = `width: ${curStdSize}px; height: ${curStdSize}px; background: rgba(255,255,255,0.1); border: 1px solid transparent; border-radius: 4px; cursor: pointer; font-size: ${curStdFontSize}px; display: flex; align-items: center; justify-content: center; transition: background 0.1s;`;
             btn.onmouseenter = () => btn.style.background = "rgba(255,255,255,0.2)";
             btn.onmouseleave = () => btn.style.background = "rgba(255,255,255,0.1)";
             btn.onclick = (e) => {
@@ -7321,7 +8153,7 @@ function renderEmojiGrid() {
             btn.title = `:${name}:`;
             btn.className = "spkmod-custom-emoji";
             btn.setAttribute("data-url", url);
-            btn.style.cssText = "width: 35px; height: 35px; background: rgba(255,255,255,0.1); border: 1px solid transparent; border-radius: 4px; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: background 0.1s; padding: 2px;";
+            btn.style.cssText = `width: ${curCustomSize}px; height: ${curCustomSize}px; background: rgba(255,255,255,0.1); border: 1px solid transparent; border-radius: 4px; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: background 0.1s; padding: 2px;`;
             btn.onmouseenter = () => btn.style.background = "rgba(255,255,255,0.2)";
             btn.onmouseleave = () => btn.style.background = "rgba(255,255,255,0.1)";
             
@@ -8341,6 +9173,8 @@ function renderInfoUI() {
 }
 
 // ============================================================================
+
+
 // FLOATING ACTION BUTTONS (Right-Click to Summon / Clean / LocalStorage Saved)
 // ============================================================================
 
@@ -8525,7 +9359,14 @@ function spkmodSpawnFloatingButton(sourceBtn, initialX, initialY, isRestoring = 
 
     // Text Label Container
     const labelSpan = document.createElement("span");
-    labelSpan.innerText = (sourceBtn.innerText || sourceBtn.textContent || "Action").trim();
+    const rawLabelText = (sourceBtn.innerText || sourceBtn.textContent || "").trim();
+    if (rawLabelText) {
+        labelSpan.innerText = rawLabelText;
+    } else if (sourceBtn.innerHTML) {
+        labelSpan.innerHTML = sourceBtn.innerHTML;
+    } else {
+        labelSpan.innerText = "Action";
+    }
     floatingBtn.appendChild(labelSpan);
 
     // Subtle drag/pin badge
@@ -8537,7 +9378,12 @@ function spkmodSpawnFloatingButton(sourceBtn, initialX, initialY, isRestoring = 
     // Dynamic state synchronizer: keep label and style updated in real-time
     const observer = new MutationObserver(() => {
         if (sourceBtn) {
-            labelSpan.innerText = (sourceBtn.innerText || sourceBtn.textContent || "Action").trim();
+            const updatedText = (sourceBtn.innerText || sourceBtn.textContent || "").trim();
+            if (updatedText) {
+                labelSpan.innerText = updatedText;
+            } else if (sourceBtn.innerHTML) {
+                labelSpan.innerHTML = sourceBtn.innerHTML;
+            }
             if (sourceBtn.style.color) {
                 floatingBtn.style.color = sourceBtn.style.color;
             }
@@ -8599,6 +9445,9 @@ function spkmodSpawnFloatingButton(sourceBtn, initialX, initialY, isRestoring = 
         }
 
         if (!isDragging && e.button === 0) {
+            if (spkmodTouchPinTriggered || floatingBtn.__spkmodDismissed || !floatingBtn.parentNode) {
+                return;
+            }
             // Click animation
             floatingBtn.style.transform = "scale(0.92)";
             setTimeout(() => {
@@ -8647,6 +9496,7 @@ function spkmodSpawnFloatingButton(sourceBtn, initialX, initialY, isRestoring = 
 
 function spkmodRemoveFloatingButton(floatingBtn) {
     if (!floatingBtn) return;
+    floatingBtn.__spkmodDismissed = true;
     if (floatingBtn.__spkmodObserver) {
         floatingBtn.__spkmodObserver.disconnect();
         floatingBtn.__spkmodObserver = null;
@@ -8684,26 +9534,155 @@ setTimeout(spkmodRestoreFloatingButtons, 600);
 setTimeout(spkmodRestoreFloatingButtons, 1800);
 setTimeout(spkmodRestoreFloatingButtons, 3500);
 
-// Global Double Right-Click Delegate for summoning buttons outside HUD
+// Mobile Touch "Hold to Pin" (Long-Press) Detector & Desktop Double Right-Click Delegate
+let spkmodTouchHoldTimer = null;
+let spkmodTouchHoldTarget = null;
+let spkmodTouchStartX = 0;
+let spkmodTouchStartY = 0;
+let spkmodTouchPinTriggered = false;
+
+function spkmodTriggerTouchPin(btn, clientX, clientY) {
+    if (!btn) return;
+    if (typeof lunDisableRightClickPinning !== "undefined" && lunDisableRightClickPinning) return;
+
+    spkmodTouchPinTriggered = true;
+    if (typeof navigator !== "undefined" && navigator.vibrate) {
+        try { navigator.vibrate(40); } catch (_) {}
+    }
+
+    if (btn.dataset.spkmodFloating === "true" || btn.classList.contains("spkmod-floating-button")) {
+        spkmodRemoveFloatingButton(btn);
+    } else {
+        spkmodSpawnFloatingButton(btn, clientX, clientY);
+    }
+
+    setTimeout(() => {
+        spkmodTouchPinTriggered = false;
+    }, 450);
+}
+
+document.addEventListener("touchstart", (e) => {
+    // Dismiss rich tooltip on mobile touch
+    const tip = document.getElementById("spkmod-rich-tooltip");
+    if (tip) tip.style.display = "none";
+
+    if (!e.touches || e.touches.length !== 1) {
+        if (spkmodTouchHoldTimer) {
+            clearTimeout(spkmodTouchHoldTimer);
+            spkmodTouchHoldTimer = null;
+            spkmodTouchHoldTarget = null;
+        }
+        return;
+    }
+
+    const touch = e.touches[0];
+    const btn = touch.target && touch.target.closest ? touch.target.closest("button.spkmod-panel-btn, #spkmod-effects-modal button, #spkmod-hud button, #spkmod-panel button, .spkmod-quick-btn, .spkmod-floating-button") : null;
+    if (!btn) {
+        if (spkmodTouchHoldTimer) {
+            clearTimeout(spkmodTouchHoldTimer);
+            spkmodTouchHoldTimer = null;
+            spkmodTouchHoldTarget = null;
+        }
+        return;
+    }
+
+    // Ignore window close buttons, drag handles, or emoji picker items
+    if (btn.innerText === "✕" || btn.id === "spkmod-drag-btn" || btn.id === "spkmod-close-btn" || btn.closest("#spkmod-emoji-picker")) return;
+
+    if (typeof lunDisableRightClickPinning !== "undefined" && lunDisableRightClickPinning) return;
+
+    spkmodTouchHoldTarget = btn;
+    spkmodTouchStartX = touch.clientX;
+    spkmodTouchStartY = touch.clientY;
+    spkmodTouchPinTriggered = false;
+
+    if (spkmodTouchHoldTimer) clearTimeout(spkmodTouchHoldTimer);
+    spkmodTouchHoldTimer = setTimeout(() => {
+        spkmodTouchHoldTimer = null;
+        if (spkmodTouchHoldTarget) {
+            spkmodTriggerTouchPin(spkmodTouchHoldTarget, spkmodTouchStartX, spkmodTouchStartY);
+            spkmodTouchHoldTarget = null;
+        }
+    }, 500);
+}, { passive: true, capture: true });
+
+document.addEventListener("touchmove", (e) => {
+    if (!spkmodTouchHoldTimer || !e.touches || e.touches.length === 0) return;
+    const touch = e.touches[0];
+    const dist = Math.hypot(touch.clientX - spkmodTouchStartX, touch.clientY - spkmodTouchStartY);
+    if (dist > 12) {
+        clearTimeout(spkmodTouchHoldTimer);
+        spkmodTouchHoldTimer = null;
+        spkmodTouchHoldTarget = null;
+    }
+}, { passive: true, capture: true });
+
+document.addEventListener("touchend", (e) => {
+    if (spkmodTouchHoldTimer) {
+        clearTimeout(spkmodTouchHoldTimer);
+        spkmodTouchHoldTimer = null;
+        spkmodTouchHoldTarget = null;
+    }
+    if (spkmodTouchPinTriggered) {
+        e.preventDefault();
+        e.stopPropagation();
+    }
+}, { capture: true });
+
+document.addEventListener("touchcancel", () => {
+    if (spkmodTouchHoldTimer) {
+        clearTimeout(spkmodTouchHoldTimer);
+        spkmodTouchHoldTimer = null;
+        spkmodTouchHoldTarget = null;
+    }
+}, { passive: true, capture: true });
+
+// Prevent accidental clicks on button release after holding to pin
+document.addEventListener("click", (e) => {
+    if (spkmodTouchPinTriggered) {
+        e.preventDefault();
+        e.stopPropagation();
+        e.stopImmediatePropagation();
+    }
+}, true);
+
+// Global Double Right-Click Delegate for summoning buttons outside HUD (Desktop) & contextmenu handshake (Mobile)
 let spkmodLastRightClickBtn = null;
 let spkmodLastRightClickTime = 0;
 
 document.addEventListener("contextmenu", (e) => {
-    const btn = e.target.closest("button.spkmod-panel-btn, #spkmod-effects-modal button, #spkmod-hud button, .spkmod-quick-btn, .spkmod-floating-button");
+    if (spkmodTouchPinTriggered) {
+        e.preventDefault();
+        e.stopPropagation();
+        return;
+    }
+
+    const btn = e.target.closest("button.spkmod-panel-btn, #spkmod-effects-modal button, #spkmod-hud button, #spkmod-panel button, .spkmod-quick-btn, .spkmod-floating-button");
     if (!btn) return;
     
     // Ignore window close buttons, drag handles, or emoji picker items
     if (btn.innerText === "✕" || btn.id === "spkmod-drag-btn" || btn.id === "spkmod-close-btn" || btn.closest("#spkmod-emoji-picker")) return;
 
-    // If right-clicked a floating button itself, handled by its own listener
+    if (typeof lunDisableRightClickPinning !== "undefined" && lunDisableRightClickPinning) {
+        return;
+    }
+
+    // Handshake: If mobile long-press dispatched a contextmenu while hold timer is active
+    if (spkmodTouchHoldTimer && spkmodTouchHoldTarget === btn) {
+        e.preventDefault();
+        e.stopPropagation();
+        clearTimeout(spkmodTouchHoldTimer);
+        spkmodTouchHoldTimer = null;
+        spkmodTouchHoldTarget = null;
+        spkmodTriggerTouchPin(btn, e.clientX, e.clientY);
+        return;
+    }
+
+    // If right-clicked a floating button itself on desktop, handled by its own listener
     if (btn.dataset.spkmodFloating === "true" || btn.classList.contains("spkmod-floating-button")) return;
 
     e.preventDefault();
     e.stopPropagation();
-
-    if (typeof lunDisableRightClickPinning !== "undefined" && lunDisableRightClickPinning) {
-        return;
-    }
 
     const now = Date.now();
     if (spkmodLastRightClickBtn === btn && (now - spkmodLastRightClickTime) <= 500) {
@@ -8715,10 +9694,6 @@ document.addEventListener("contextmenu", (e) => {
         spkmodLastRightClickTime = now;
     }
 }, true);
-
-
-
-
 
 
 const lunJumpAnimMs = 500;
@@ -11068,8 +12043,395 @@ window.spkmodResetAvatarColors = function() {
 	}
 
 	window.spkmodSanitizeRemotePlayers();
+	if (typeof window.spkmodTogglePumpkinCartTexture === 'function') {
+		window.spkmodTogglePumpkinCartTexture(false);
+	}
 	if (typeof chatLog === 'function') chatLog("[FX] Reset all avatar custom dyes and effects (Self + Other players).");
 	if (typeof updateLocalEditsUI === 'function') updateLocalEditsUI();
+};
+
+
+// ============================================================================
+// PUMPKIN CART TEXTURE REPLACEMENT SKINS (:SPK_88:, 1, 2, 3)
+// ============================================================================
+const SPKMOD_PUMPKIN_CART_ORIG_TEX = "https://speakirpg.overture.io.kr/models/mount_pumpkin_cart_halloween/HW_Map_Body.png";
+
+const SPKMOD_PUMPKIN_CART_SKINS = {
+	uifi: { id: "uifi", label: ":SPK_88:", file: "test.png", url: "https://raw.githubusercontent.com/DJTOMATO/SpeakiRPG/refs/heads/main/test.png" },
+	1: { id: "1", label: "1️⃣", file: "test2.png", url: "https://raw.githubusercontent.com/DJTOMATO/SpeakiRPG/refs/heads/main/test2.png" },
+	2: { id: "2", label: "2️⃣", file: "test3.png", url: "https://raw.githubusercontent.com/DJTOMATO/SpeakiRPG/refs/heads/main/test3.png" },
+	3: { id: "3", label: "3️⃣", file: "test4.png", url: "https://raw.githubusercontent.com/DJTOMATO/SpeakiRPG/refs/heads/main/test4.png" },
+	4: { id: "4", label: "4️⃣ ", file: "dancing.webp", url: "https://raw.githubusercontent.com/DJTOMATO/SpeakiRPG/refs/heads/main/dancing.webp" }
+};
+
+window.spkmodActivePumpkinSkin = null;
+window.spkmodPumpkinCartTexReplaced = false;
+const _spkmodCartImages = {};
+let _spkmodOriginalCartImage = null;
+let _spkmodCartAnimationLoopId = null;
+let _spkmodCartAnimFrames = null;
+let _spkmodCartAnimCanvas = null;
+let _spkmodCartAnimCurrentIndex = 0;
+
+function spkmodStopCartAnimation() {
+	if (_spkmodCartAnimationLoopId) {
+		clearTimeout(_spkmodCartAnimationLoopId);
+		_spkmodCartAnimationLoopId = null;
+	}
+	if (Array.isArray(_spkmodCartAnimFrames)) {
+		for (const frame of _spkmodCartAnimFrames) {
+			if (frame && frame.bitmap && typeof frame.bitmap.close === "function") {
+				try { frame.bitmap.close(); } catch (_) {}
+			}
+		}
+		_spkmodCartAnimFrames = null;
+	}
+	_spkmodCartAnimCurrentIndex = 0;
+}
+
+function spkmodIsAnimatedUrl(url) {
+	if (typeof url !== "string") return false;
+	const clean = url.split("?")[0].toLowerCase();
+	return clean.endsWith(".webp") || clean.endsWith(".gif") || clean.endsWith(".apng");
+}
+
+async function spkmodDecodeAnimatedImage(url) {
+	if (typeof window.ImageDecoder === "undefined") {
+		throw new Error("ImageDecoder not supported in this environment");
+	}
+	const res = await fetch(url, { mode: "cors" });
+	if (!res.ok) throw new Error(`HTTP error ${res.status}`);
+	const data = await res.arrayBuffer();
+	const clean = url.split("?")[0].toLowerCase();
+	let type = "image/webp";
+	if (clean.endsWith(".gif")) type = "image/gif";
+	else if (clean.endsWith(".apng")) type = "image/png";
+
+	const decoder = new window.ImageDecoder({ data, type });
+	await decoder.tracks.ready;
+	const track = decoder.tracks.selectedTrack;
+	const frameCount = (track && track.frameCount) ? track.frameCount : 1;
+
+	const frames = [];
+	for (let i = 0; i < frameCount; i++) {
+		const frameResult = await decoder.decode({ frameIndex: i });
+		const durationMicro = frameResult.image.duration;
+		const durationMs = (typeof durationMicro === "number" && durationMicro > 0)
+			? Math.max(16, Math.round(durationMicro / 1000))
+			: 83; // default ~12 fps (83ms)
+		frames.push({
+			bitmap: frameResult.image,
+			duration: durationMs,
+			width: frameResult.image.displayWidth || 512,
+			height: frameResult.image.displayHeight || 512
+		});
+	}
+	return frames;
+}
+
+function spkmodStartCartAnimation(frames, skinKey) {
+	spkmodStopCartAnimation();
+	if (!frames || frames.length === 0) return;
+
+	_spkmodCartAnimFrames = frames;
+	const width = frames[0].width || 512;
+	const height = frames[0].height || 512;
+
+	if (!_spkmodCartAnimCanvas) {
+		_spkmodCartAnimCanvas = document.createElement("canvas");
+	}
+	_spkmodCartAnimCanvas.width = width;
+	_spkmodCartAnimCanvas.height = height;
+	const ctx = _spkmodCartAnimCanvas.getContext("2d");
+
+	ctx.clearRect(0, 0, width, height);
+	ctx.drawImage(frames[0].bitmap, 0, 0, width, height);
+	spkmodApplyPumpkinCartTextureToScene(true, _spkmodCartAnimCanvas);
+
+	if (frames.length <= 1) return;
+
+	_spkmodCartAnimCurrentIndex = 0;
+	function tick() {
+		if (window.spkmodActivePumpkinSkin !== skinKey) {
+			spkmodStopCartAnimation();
+			return;
+		}
+		_spkmodCartAnimCurrentIndex = (_spkmodCartAnimCurrentIndex + 1) % _spkmodCartAnimFrames.length;
+		const curFrame = _spkmodCartAnimFrames[_spkmodCartAnimCurrentIndex];
+		ctx.clearRect(0, 0, width, height);
+		ctx.drawImage(curFrame.bitmap, 0, 0, width, height);
+
+		if (typeof gameState !== "undefined" && gameState && gameState.scene) {
+			gameState.scene.traverse(child => {
+				if (child.isMesh && child.material) {
+					const mats = Array.isArray(child.material) ? child.material : [child.material];
+					for (const m of mats) {
+						if (m && m.map && m.map.image === _spkmodCartAnimCanvas) {
+							m.map.needsUpdate = true;
+						}
+					}
+				}
+			});
+		}
+
+		_spkmodCartAnimationLoopId = setTimeout(tick, curFrame.duration);
+	}
+
+	_spkmodCartAnimationLoopId = setTimeout(tick, frames[0].duration);
+}
+
+window.spkmodPlayAnimatedCartTexture = function (url, skinKey = "custom_anim") {
+	spkmodEnsurePumpkinCartHooks();
+	window.spkmodActivePumpkinSkin = skinKey;
+	window.spkmodPumpkinCartTexReplaced = true;
+	spkmodDecodeAnimatedImage(url).then(frames => {
+		if (window.spkmodActivePumpkinSkin === skinKey) {
+			spkmodStartCartAnimation(frames, skinKey);
+		}
+	}).catch(err => {
+		console.warn("[SpeakiMod] Animated texture error:", err);
+		const img = new Image();
+		img.crossOrigin = "anonymous";
+		img.onload = () => {
+			if (window.spkmodActivePumpkinSkin === skinKey) {
+				spkmodApplyPumpkinCartTextureToScene(true, img);
+			}
+		};
+		img.src = url;
+	});
+	spkmodUpdatePumpkinCartButtonStyles();
+};
+
+function spkmodGetCurrentPumpkinSkinUrl() {
+	if (!window.spkmodActivePumpkinSkin) return null;
+	const skin = SPKMOD_PUMPKIN_CART_SKINS[window.spkmodActivePumpkinSkin];
+	return skin ? skin.url : null;
+}
+
+function spkmodEnsurePumpkinCartHooks() {
+	if (window.__spkmodPumpkinCartHooksInstalled) return;
+	window.__spkmodPumpkinCartHooksInstalled = true;
+
+	const imgProto = typeof HTMLImageElement !== 'undefined' ? HTMLImageElement.prototype : null;
+	if (imgProto) {
+		const desc = Object.getOwnPropertyDescriptor(imgProto, "src");
+		if (desc && desc.set) {
+			const origSrcSet = desc.set;
+			Object.defineProperty(imgProto, "src", {
+				set: function (val) {
+					const targetUrl = spkmodGetCurrentPumpkinSkinUrl();
+					if (targetUrl && typeof val === "string" && val.includes("HW_Map_Body.png")) {
+						val = targetUrl;
+					}
+					return origSrcSet.call(this, val);
+				},
+				get: desc.get,
+				configurable: true,
+				enumerable: true
+			});
+		}
+	}
+
+	if (typeof window.fetch === "function") {
+		const origFetch = window.fetch;
+		window.fetch = function (resource, config) {
+			const targetUrl = spkmodGetCurrentPumpkinSkinUrl();
+			if (targetUrl) {
+				if (typeof resource === "string" && resource.includes("HW_Map_Body.png")) {
+					resource = targetUrl;
+				} else if (resource && typeof resource.url === "string" && resource.url.includes("HW_Map_Body.png")) {
+					resource = new Request(targetUrl, resource);
+				}
+			}
+			return origFetch.apply(this, arguments);
+		};
+	}
+
+	if (typeof XMLHttpRequest !== "undefined" && XMLHttpRequest.prototype && XMLHttpRequest.prototype.open) {
+		const origXhrOpen = XMLHttpRequest.prototype.open;
+		XMLHttpRequest.prototype.open = function (method, url, ...rest) {
+			const targetUrl = spkmodGetCurrentPumpkinSkinUrl();
+			if (targetUrl && typeof url === "string" && url.includes("HW_Map_Body.png")) {
+				url = targetUrl;
+			}
+			return origXhrOpen.call(this, method, url, ...rest);
+		};
+	}
+}
+
+function spkmodGetCartSkinImage(skinKey, callback) {
+	const skin = SPKMOD_PUMPKIN_CART_SKINS[skinKey];
+	if (!skin) return;
+	if (_spkmodCartImages[skinKey] && _spkmodCartImages[skinKey].complete) {
+		callback(_spkmodCartImages[skinKey]);
+		return;
+	}
+	const img = new Image();
+	img.crossOrigin = "anonymous";
+	img.onload = () => {
+		_spkmodCartImages[skinKey] = img;
+		callback(img);
+	};
+	img.src = skin.url;
+}
+
+function spkmodGetOriginalCartImage(callback) {
+	if (_spkmodOriginalCartImage && _spkmodOriginalCartImage.complete) {
+		callback(_spkmodOriginalCartImage);
+		return;
+	}
+	const img = new Image();
+	img.crossOrigin = "anonymous";
+	img.onload = () => {
+		_spkmodOriginalCartImage = img;
+		callback(img);
+	};
+	img.onerror = () => {
+		const img2 = new Image();
+		img2.onload = () => {
+			_spkmodOriginalCartImage = img2;
+			callback(img2);
+		};
+		img2.src = SPKMOD_PUMPKIN_CART_ORIG_TEX;
+	};
+	img.src = SPKMOD_PUMPKIN_CART_ORIG_TEX;
+}
+
+function spkmodApplyPumpkinCartTextureToScene(enable, targetImage) {
+	if (typeof gameState === "undefined" || !gameState) return;
+	const scene = gameState.scene;
+	if (!scene || typeof scene.traverse !== "function") return;
+
+	const applyToMat = (mat, childName) => {
+		if (!mat) return;
+		const mats = Array.isArray(mat) ? mat : [mat];
+		for (const m of mats) {
+			if (!m) continue;
+			const cName = (childName || "").toLowerCase();
+			const mName = (m.name || "").toLowerCase();
+			const imgSrc = (m.map && m.map.image && typeof m.map.image.src === "string") ? m.map.image.src : "";
+			const isCartMap = (m.map && m.map.image && (
+				imgSrc.includes("HW_Map_Body") || imgSrc.includes("test") || imgSrc.includes("mount_pumpkin_cart") ||
+				mName.includes("hw_map_body") || mName.includes("pumpkin")
+			)) || cName.includes("pumpkin") || cName.includes("hw_map");
+
+			if (isCartMap || (m.__spkmodOrigCartImage !== undefined) || (m.__spkmodOrigCartMap !== undefined)) {
+				if (m.__spkmodOrigCartImage === undefined && m.map && m.map.image) {
+					m.__spkmodOrigCartImage = m.map.image;
+				}
+				if (m.__spkmodOrigCartMap === undefined && m.map) {
+					m.__spkmodOrigCartMap = m.map;
+				}
+				if (enable) {
+					if (targetImage) {
+						if (m.map) {
+							m.map.image = targetImage;
+							m.map.needsUpdate = true;
+						}
+					}
+					m.needsUpdate = true;
+				} else {
+					const origImg = m.__spkmodOrigCartImage || _spkmodOriginalCartImage;
+					if (origImg && m.map) {
+						m.map.image = origImg;
+						m.map.needsUpdate = true;
+					} else if (m.__spkmodOrigCartMap) {
+						m.map = m.__spkmodOrigCartMap;
+						if (m.map) m.map.needsUpdate = true;
+					}
+					m.needsUpdate = true;
+				}
+			}
+		}
+	};
+
+	scene.traverse(child => {
+		if (child.isMesh && child.material) {
+			applyToMat(child.material, child.name);
+		}
+	});
+}
+
+function spkmodUpdatePumpkinCartButtonStyles() {
+	if (typeof lunPanelElements === "undefined" || !lunPanelElements) return;
+	const btnMap = {
+		uifi: lunPanelElements.pumpkinCartTexBtn,
+		1: lunPanelElements.pumpkinCartTexBtn1,
+		2: lunPanelElements.pumpkinCartTexBtn2,
+		3: lunPanelElements.pumpkinCartTexBtn3
+	};
+	for (const [key, btn] of Object.entries(btnMap)) {
+		if (!btn) continue;
+		const isCurrent = window.spkmodActivePumpkinSkin === key;
+		btn.style.border = isCurrent ? "1px solid #4ade80" : "";
+		btn.style.boxShadow = isCurrent ? "0 0 8px rgba(74, 222, 128, 0.45)" : "";
+	}
+}
+window.spkmodUpdatePumpkinCartButtonStyles = spkmodUpdatePumpkinCartButtonStyles;
+
+window.spkmodSelectPumpkinCartSkin = function (skinKey) {
+	spkmodEnsurePumpkinCartHooks();
+
+	if (skinKey === null || skinKey === undefined || window.spkmodActivePumpkinSkin === skinKey) {
+		window.spkmodActivePumpkinSkin = null;
+		window.spkmodPumpkinCartTexReplaced = false;
+		spkmodStopCartAnimation();
+		if (!_spkmodOriginalCartImage) {
+			spkmodGetOriginalCartImage(() => {
+				spkmodApplyPumpkinCartTextureToScene(false);
+			});
+		} else {
+			spkmodApplyPumpkinCartTextureToScene(false);
+		}
+		spkmodUpdatePumpkinCartButtonStyles();
+		if (typeof chatLog === "function") {
+			chatLog("🎃 Pumpkin Cart Texture: RESTORED (Original)");
+		}
+		return;
+	}
+
+	const skin = SPKMOD_PUMPKIN_CART_SKINS[skinKey];
+	if (!skin) return;
+
+	window.spkmodActivePumpkinSkin = skinKey;
+	window.spkmodPumpkinCartTexReplaced = true;
+
+	if (spkmodIsAnimatedUrl(skin.url)) {
+		spkmodDecodeAnimatedImage(skin.url).then(frames => {
+			if (window.spkmodActivePumpkinSkin === skinKey) {
+				spkmodStartCartAnimation(frames, skinKey);
+			}
+		}).catch(err => {
+			console.warn("[SpeakiMod] Animated texture decode error, falling back to static:", err);
+			spkmodGetCartSkinImage(skinKey, img => {
+				if (window.spkmodActivePumpkinSkin === skinKey) {
+					spkmodApplyPumpkinCartTextureToScene(true, img);
+				}
+			});
+		});
+	} else {
+		spkmodStopCartAnimation();
+		spkmodGetCartSkinImage(skinKey, img => {
+			if (window.spkmodActivePumpkinSkin === skinKey) {
+				spkmodApplyPumpkinCartTextureToScene(true, img);
+			}
+		});
+	}
+	spkmodUpdatePumpkinCartButtonStyles();
+
+	if (typeof chatLog === "function") {
+		chatLog(`🎃 Pumpkin Cart Texture (${skin.label}): INJECTED (${skin.file})`);
+	}
+};
+
+window.spkmodTogglePumpkinCartTexture = function (forcedState) {
+	if (forcedState === false) {
+		window.spkmodSelectPumpkinCartSkin(null);
+	} else if (forcedState === true) {
+		window.spkmodSelectPumpkinCartSkin("uifi");
+	} else {
+		window.spkmodSelectPumpkinCartSkin(window.spkmodActivePumpkinSkin ? null : "uifi");
+	}
 };
 
 // ============================================================================
@@ -11759,9 +13121,14 @@ window.spkmodPlayGather = function() {
 // STEP PARTICLE TRAIL (Stars, Rainbow, Hearts)
 // ============================================================================
 
+const _spkSavedTrailEnabled = (typeof window !== 'undefined' && window.localStorage)
+	? localStorage.getItem('spkmod-step-trail-enabled') === 'true'
+	: false;
+const _spkSavedTrailType = (typeof window !== 'undefined' && window.localStorage && localStorage.getItem('spkmod-step-trail-type')) || 'stars';
+
 window.spkmodStepTrail = {
-	enabled: false,
-	type: 'stars',
+	enabled: _spkSavedTrailEnabled,
+	type: ['stars', 'rainbow', 'hearts'].includes(_spkSavedTrailType) ? _spkSavedTrailType : 'stars',
 	distAccum: 0,
 	lastPos: null,
 	animId: null
@@ -11840,6 +13207,13 @@ window.spkmodToggleStepTrail = function(enabled, type) {
 		window.spkmodStepTrail.enabled = !window.spkmodStepTrail.enabled;
 	}
 
+	if (window.localStorage) {
+		try {
+			localStorage.setItem('spkmod-step-trail-enabled', window.spkmodStepTrail.enabled ? 'true' : 'false');
+			localStorage.setItem('spkmod-step-trail-type', window.spkmodStepTrail.type || 'stars');
+		} catch (_) {}
+	}
+
 	if (window.spkmodStepTrail.animId) {
 		cancelAnimationFrame(window.spkmodStepTrail.animId);
 		window.spkmodStepTrail.animId = null;
@@ -11858,6 +13232,11 @@ window.spkmodToggleStepTrail = function(enabled, type) {
 
 window.spkmodSetTrailType = function(type) {
 	window.spkmodStepTrail.type = type;
+	if (window.localStorage) {
+		try {
+			localStorage.setItem('spkmod-step-trail-type', type);
+		} catch (_) {}
+	}
 	if (!window.spkmodStepTrail.enabled) {
 		window.spkmodToggleStepTrail(true, type);
 	} else {
@@ -11865,6 +13244,10 @@ window.spkmodSetTrailType = function(type) {
 		if (typeof updateLocalEditsUI === 'function') updateLocalEditsUI();
 	}
 };
+
+if (window.spkmodStepTrail.enabled && !window.spkmodStepTrail.animId) {
+	window.spkmodStepTrail.animId = requestAnimationFrame(spkmodStepTrailLoop);
+}
 
 window.spkmodBurstSpamActive = false;
 window.spkmodBurstSpamInterval = null;
@@ -11920,7 +13303,6 @@ window.spkmodToggleBurstSpam = function(forceState) {
 
 	if (typeof updateLocalEditsUI === 'function') updateLocalEditsUI();
 };
-
 
 
 const mapModalElements = {};
@@ -12468,10 +13850,10 @@ const SPKMOD_DYE_COLORS = [
 	{ id: "Gold", key: "dyeColorGold", name: "Gold", hex: "#facc15", emoji: "🟡" },
 	{ id: "Purple", key: "dyeColorPurple", name: "Purple", hex: "#8b5cf6", emoji: "🟣" },
 	{ id: "HotPink", key: "dyeColorHotPink", name: "Hot Pink", hex: "#ec4899", emoji: "🌸" },
-	{ id: "Cyan", key: "dyeColorCyan", name: "Cyan", hex: "#06b6d4", emoji: "🩵" },
+	{ id: "Cyan", key: "dyeColorCyan", name: "Cyan", hex: "#06b6d4", emoji: "💎" },
 	{ id: "Orange", key: "dyeColorOrange", name: "Orange", hex: "#f97316", emoji: "🧡" },
 	{ id: "Mint", key: "dyeColorMint", name: "Mint", hex: "#14b8a6", emoji: "🌿" },
-	{ id: "Amber", key: "dyeColorAmber", name: "Amber", hex: "#d97706", emoji: "🪙" },
+	{ id: "Amber", key: "dyeColorAmber", name: "Amber", hex: "#d97706", emoji: "🔶" },
 	{ id: "Pearl", key: "dyeColorPearl", name: "Pearl", hex: "#ffffff", emoji: "⚪" },
 	{ id: "Obsidian", key: "dyeColorObsidian", name: "Obsidian", hex: "#18181b", emoji: "⚫" },
 	{ id: "Magenta", key: "dyeColorMagenta", name: "Magenta", hex: "#f43f5e", emoji: "🍇" },
@@ -12479,7 +13861,7 @@ const SPKMOD_DYE_COLORS = [
 	{ id: "Sepia", key: "dyeColorSepia", name: "Sepia", hex: "#b45309", emoji: "☕" },
 	{ id: "Lavender", key: "dyeColorLavender", name: "Lavender", hex: "#a78bfa", emoji: "🔮" },
 	{ id: "Lime", key: "dyeColorLime", name: "Lime", hex: "#84cc16", emoji: "🍀" },
-	{ id: "Indigo", key: "dyeColorIndigo", name: "Indigo", hex: "#4f46e5", emoji: "🫐" }
+	{ id: "Indigo", key: "dyeColorIndigo", name: "Indigo", hex: "#4f46e5", emoji: "🌌" }
 ];
 
 document.body.appendChild(
@@ -12530,6 +13912,53 @@ document.body.appendChild(
 					innerText: t("flyEveryoneBtn"),
 					onclick: () => window.spkmodTriggerFlyEveryone && window.spkmodTriggerFlyEveryone()
 				}),
+				buildElement("div", { style: "display: grid; grid-template-columns: repeat(4, 1fr); gap: 3px;" }, [
+					lunPanelElements.pumpkinCartTexBtn = buildElement("button", {
+						className: "spkmod-panel-btn",
+						style: "padding: 5px 2px; font-size: 11px; display: inline-flex; align-items: center; justify-content: center; min-height: 28px;",
+						innerHTML: (typeof renderSpkmodInlineEmojis === "function" ? renderSpkmodInlineEmojis(":SPK_88:", "height: 20px; width: 20px; object-fit: contain; vertical-align: middle; display: inline-block; pointer-events: none;") : "🎃"),
+						title: "Pumpkin Cart Skin: Ui (:SPK_88:) (test.png)",
+						onclick: () => {
+							if (window.spkmodSelectPumpkinCartSkin) window.spkmodSelectPumpkinCartSkin("uifi");
+						}
+					}),
+					lunPanelElements.pumpkinCartTexBtn1 = buildElement("button", {
+						className: "spkmod-panel-btn",
+						style: "padding: 5px 2px; font-size: 13px; display: inline-flex; align-items: center; justify-content: center; min-height: 28px;",
+						innerText: "1️⃣",
+						title: "Pumpkin Cart Skin: 1 (test2.png)",
+						onclick: () => {
+							if (window.spkmodSelectPumpkinCartSkin) window.spkmodSelectPumpkinCartSkin("1");
+						}
+					}),
+					lunPanelElements.pumpkinCartTexBtn2 = buildElement("button", {
+						className: "spkmod-panel-btn",
+						style: "padding: 5px 2px; font-size: 13px; display: inline-flex; align-items: center; justify-content: center; min-height: 28px;",
+						innerText: "2️⃣",
+						title: "Pumpkin Cart Skin: 2 (test3.png)",
+						onclick: () => {
+							if (window.spkmodSelectPumpkinCartSkin) window.spkmodSelectPumpkinCartSkin("2");
+						}
+					}),
+					lunPanelElements.pumpkinCartTexBtn3 = buildElement("button", {
+						className: "spkmod-panel-btn",
+						style: "padding: 5px 2px; font-size: 13px; display: inline-flex; align-items: center; justify-content: center; min-height: 28px;",
+						innerText: "3️⃣",
+						title: "Pumpkin Cart Skin: 3 (test4.png)",
+						onclick: () => {
+							if (window.spkmodSelectPumpkinCartSkin) window.spkmodSelectPumpkinCartSkin("3");
+						}
+					}),
+					lunPanelElements.pumpkinCartTexBtn3 = buildElement("button", {
+						className: "spkmod-panel-btn",
+						style: "padding: 5px 2px; font-size: 13px; display: inline-flex; align-items: center; justify-content: center; min-height: 28px;",
+						innerText: "4️⃣",
+						title: "Pumpkin Cart Skin: 4 (dancing.webp)",
+						onclick: () => {
+							if (window.spkmodSelectPumpkinCartSkin) window.spkmodSelectPumpkinCartSkin("4"); // lol im retarded
+						}
+					})
+				]),
 
 				// 🍳 Cooking & Kitchen Animations
 				buildElement("div", { style: "display: flex; flex-direction: column; gap: 4px; border-top: 1px solid #555; padding-top: 6px;" }, [
@@ -13057,12 +14486,12 @@ function updateLocalEditsUI() {
 	if (editsModalElements.chromaBtnYellow) setText(editsModalElements.chromaBtnYellow, "🟡 " + (t("skyColorYellow") || "Neon Yellow"));
 	if (editsModalElements.chromaBtnOrange) setText(editsModalElements.chromaBtnOrange, "🧡 " + (t("skyColorOrange") || "Vivid Orange"));
 	if (editsModalElements.chromaBtnPink) setText(editsModalElements.chromaBtnPink, "🌸 " + (t("skyColorPink") || "Soft Pink"));
-	if (editsModalElements.chromaBtnCyan) setText(editsModalElements.chromaBtnCyan, "🩵 " + (t("skyColorCyan") || "Electric Cyan"));
+	if (editsModalElements.chromaBtnCyan) setText(editsModalElements.chromaBtnCyan, "💎 " + (t("skyColorCyan") || "Electric Cyan"));
 	if (editsModalElements.chromaBtnMint) setText(editsModalElements.chromaBtnMint, "🌿 " + (t("skyColorMint") || "Mint Green"));
 	if (editsModalElements.chromaBtnPurple) setText(editsModalElements.chromaBtnPurple, "💜 " + (t("skyColorPurple") || "Deep Purple"));
-	if (editsModalElements.chromaBtnAmber) setText(editsModalElements.chromaBtnAmber, "🪙 " + (t("skyColorAmber") || "Warm Amber"));
+	if (editsModalElements.chromaBtnAmber) setText(editsModalElements.chromaBtnAmber, "🔶 " + (t("skyColorAmber") || "Warm Amber"));
 	if (editsModalElements.chromaBtnCrimson) setText(editsModalElements.chromaBtnCrimson, "🍷 " + (t("skyColorCrimson") || "Crimson Wine"));
-	if (editsModalElements.chromaBtnSlate) setText(editsModalElements.chromaBtnSlate, "🩶 " + (t("skyColorSlate") || "Studio Slate"));
+	if (editsModalElements.chromaBtnSlate) setText(editsModalElements.chromaBtnSlate, "🔘 " + (t("skyColorSlate") || "Studio Slate"));
 	if (editsModalElements.chromaBtnSepia) setText(editsModalElements.chromaBtnSepia, "☕ " + (t("skyColorSepia") || "Warm Sepia"));
 
 	const chromaBtns = {
@@ -13165,7 +14594,34 @@ function updateLocalEditsUI() {
 	}
 	if (editsModalElements.facialResetBtn) {
 		setText(editsModalElements.facialResetBtn, t("exprResetBtn") || "↺ Reset");
-		editsModalElements.facialResetBtn.title = t("exprResetTooltip") || "Reset / Unlock Expression";
+		editsModalElements.facialResetBtn.title = t("exprResetTooltip") || "Reset all other players' expressions";
+	}
+	if (editsModalElements.facialApplyAllBtn) {
+		const baseAllText = t("exprApplyAllBtn") || "🌍 Apply to All Players";
+		const activeAll = (typeof lunAllPlayersFacialExpression !== "undefined" && lunAllPlayersFacialExpression) || "none";
+		if (activeAll !== "none") {
+			const badge = (typeof LUN_FACIAL_EXPR_EMOJIS !== "undefined" && LUN_FACIAL_EXPR_EMOJIS[activeAll]) || "";
+			setText(editsModalElements.facialApplyAllBtn, badge ? `${baseAllText} (${badge})` : baseAllText);
+			editsModalElements.facialApplyAllBtn.style.borderColor = "var(--spkmod-accent, #ffd54a)";
+			editsModalElements.facialApplyAllBtn.style.background = "rgba(255, 255, 255, 0.25)";
+			editsModalElements.facialApplyAllBtn.style.fontWeight = "bold";
+		} else {
+			setText(editsModalElements.facialApplyAllBtn, baseAllText);
+			editsModalElements.facialApplyAllBtn.style.borderColor = "";
+			editsModalElements.facialApplyAllBtn.style.background = "";
+			editsModalElements.facialApplyAllBtn.style.fontWeight = "normal";
+		}
+		editsModalElements.facialApplyAllBtn.title = t("exprApplyAllTooltip") || "Apply selected expression to all other players on the map";
+	}
+	if (editsModalElements.facialTargetInput) {
+		editsModalElements.facialTargetInput.placeholder = t("exprTargetPlaceholder") || "Character Name...";
+	}
+	if (editsModalElements.facialTargetApplyBtn) {
+		const baseTargetBtn = t("exprApplyTargetBtn") || "Apply";
+		const targetCount = (typeof lunTargetFacialExpressions !== "undefined" && lunTargetFacialExpressions) ? lunTargetFacialExpressions.size : 0;
+		setText(editsModalElements.facialTargetApplyBtn, targetCount > 0 ? `${baseTargetBtn} (${targetCount})` : baseTargetBtn);
+		editsModalElements.facialTargetApplyBtn.title = t("exprApplyTargetTooltip") || "Apply selected expression to this character";
+		editsModalElements.facialTargetApplyBtn.style.borderColor = targetCount > 0 ? "var(--spkmod-accent, #ffd54a)" : "";
 	}
 	if (editsModalElements.exprBtnConfident) editsModalElements.exprBtnConfident.title = t("exprConfident") || "Confident / Smug 😏";
 	if (editsModalElements.exprBtnCurious) editsModalElements.exprBtnCurious.title = t("exprCurious") || "Curious 🥺";
@@ -13223,7 +14679,7 @@ function updateLocalEditsUI() {
 	if (editsModalElements.camBtnGameboy) setText(editsModalElements.camBtnGameboy, "👾 " + (t("effectGameboy") || "Monatium Boy"));
 	if (editsModalElements.camBtnBloodMoon) setText(editsModalElements.camBtnBloodMoon, "🩸 " + (t("effectBloodMoon") || "Blood Moon"));
 	if (editsModalElements.camBtnSynthwave) setText(editsModalElements.camBtnSynthwave, "🔮 " + (t("effectSynthwave") || "Synthwave"));
-	if (editsModalElements.camBtnUnderwater) setText(editsModalElements.camBtnUnderwater, "🫧 " + (t("effectUnderwater") || "Aqua Fantasy"));
+	if (editsModalElements.camBtnUnderwater) setText(editsModalElements.camBtnUnderwater, "🌊 " + (t("effectUnderwater") || "Aqua Fantasy"));
 	if (editsModalElements.camBtnGoldenHour) setText(editsModalElements.camBtnGoldenHour, "☀️ " + (t("effectGoldenHour") || "Golden Hour"));
 	if (editsModalElements.camBtnComicBook) setText(editsModalElements.camBtnComicBook, "💥 " + (t("effectComicBook") || "Comic Book"));
 	if (editsModalElements.camBtnArctic) setText(editsModalElements.camBtnArctic, "❄️ " + (t("effectArctic") || "Arctic Frost"));
@@ -13522,6 +14978,7 @@ function updateLocalEditsUI() {
 	if (editsModalElements.stepTrailStarsBtn) setText(editsModalElements.stepTrailStarsBtn, t("stepTrailStars") || "⭐ Stars");
 	if (editsModalElements.stepTrailRainbowBtn) setText(editsModalElements.stepTrailRainbowBtn, t("stepTrailRainbow") || "🌈 Rainbow");
 	if (editsModalElements.stepTrailHeartsBtn) setText(editsModalElements.stepTrailHeartsBtn, t("stepTrailHearts") || "💖 Hearts");
+	if (window.spkmodUpdatePumpkinCartButtonStyles) window.spkmodUpdatePumpkinCartButtonStyles();
 }
 
 function toggleLocalEditsModal() {
@@ -13645,7 +15102,7 @@ document.body.appendChild(
 					editsModalElements.chromaBtnCyan = buildElement("button", {
 						className: "spkmod-panel-btn",
 						style: "padding: 5px 2px; font-size: 9.5px; text-align: center; color: #38bdf8;",
-						innerText: "🩵 " + (t("skyColorCyan") || "Electric Cyan"),
+						innerText: "💎 " + (t("skyColorCyan") || "Electric Cyan"),
 						onclick: () => { applyChromaKeyColor("cyan", true); updateLocalEditsUI(); }
 					}),
 					editsModalElements.chromaBtnMint = buildElement("button", {
@@ -13663,7 +15120,7 @@ document.body.appendChild(
 					editsModalElements.chromaBtnAmber = buildElement("button", {
 						className: "spkmod-panel-btn",
 						style: "padding: 5px 2px; font-size: 9.5px; text-align: center; color: #fbbf24;",
-						innerText: "🪙 " + (t("skyColorAmber") || "Warm Amber"),
+						innerText: "🔶 " + (t("skyColorAmber") || "Warm Amber"),
 						onclick: () => { applyChromaKeyColor("amber", true); updateLocalEditsUI(); }
 					}),
 					editsModalElements.chromaBtnCrimson = buildElement("button", {
@@ -13675,7 +15132,7 @@ document.body.appendChild(
 					editsModalElements.chromaBtnSlate = buildElement("button", {
 						className: "spkmod-panel-btn",
 						style: "padding: 5px 2px; font-size: 9.5px; text-align: center; color: #94a3b8;",
-						innerText: "🩶 " + (t("skyColorSlate") || "Studio Slate"),
+						innerText: "🔘 " + (t("skyColorSlate") || "Studio Slate"),
 						onclick: () => { applyChromaKeyColor("slate", true); updateLocalEditsUI(); }
 					}),
 					editsModalElements.chromaBtnSepia = buildElement("button", {
@@ -13791,8 +15248,8 @@ document.body.appendChild(
 						className: "spkmod-panel-btn",
 						style: "padding: 5px 10px; font-size: 11px; text-align: center;",
 						innerText: t("exprResetBtn") || "↺ Reset",
-						title: t("exprResetTooltip") || "Reset / Unlock Expression",
-						onclick: () => applyLockedFacialExpression("none")
+						title: t("exprResetTooltip") || "Reset all other players' expressions",
+						onclick: () => resetRemoteFacialExpressions()
 					})
 				]),
 				buildElement("div", { style: "display: grid; grid-template-columns: repeat(8, 1fr); gap: 4px;" }, [
@@ -13851,6 +15308,54 @@ document.body.appendChild(
 						innerText: "😨",
 						title: t("exprWorried") || "Worried Tongue 😨",
 						onclick: () => applyLockedFacialExpression("open_worried_tongue")
+					})
+				]),
+				editsModalElements.facialApplyAllBtn = buildElement("button", {
+					className: "spkmod-panel-btn",
+					style: "width: 100%; padding: 5px 6px; font-size: 11px; text-align: center;",
+					innerText: t("exprApplyAllBtn") || "🌍 Apply to All Players",
+					title: t("exprApplyAllTooltip") || "Apply selected expression to all other players on the map",
+					onclick: () => applyAllPlayersFacialExpression()
+				}),
+				buildElement("div", { style: "display: flex; gap: 4px;" }, [
+					editsModalElements.facialTargetInput = buildElement("input", {
+						type: "text",
+						placeholder: t("exprTargetPlaceholder") || "Character Name...",
+						style: "flex: 1; min-width: 0; box-sizing: border-box; padding: 4px 6px; font-size: 11px; border-radius: 4px; border: 1px solid #555; background: #111; color: #fff;",
+						onkeydown: (e) => {
+							e.stopPropagation();
+							if (e.key === "Enter") {
+								e.preventDefault();
+								if (editsModalElements.facialTargetApplyBtn) editsModalElements.facialTargetApplyBtn.click();
+							}
+						},
+						onkeyup: (e) => e.stopPropagation(),
+						onkeypress: (e) => e.stopPropagation()
+					}),
+					editsModalElements.facialTargetApplyBtn = buildElement("button", {
+						className: "spkmod-panel-btn",
+						style: "padding: 4px 12px; font-size: 11px; text-align: center; flex-shrink: 0;",
+						innerText: t("exprApplyTargetBtn") || "Apply",
+						title: t("exprApplyTargetTooltip") || "Apply selected expression to this character",
+						onclick: () => {
+							const nameVal = editsModalElements.facialTargetInput ? editsModalElements.facialTargetInput.value : "";
+							if (!nameVal || !nameVal.trim()) {
+								if (editsModalElements.facialTargetInput) {
+									editsModalElements.facialTargetInput.style.borderColor = "#ff5555";
+									setTimeout(() => {
+										if (editsModalElements.facialTargetInput) editsModalElements.facialTargetInput.style.borderColor = "#555";
+									}, 700);
+								}
+								return;
+							}
+							applyTargetPlayerFacialExpression(nameVal);
+							if (editsModalElements.facialTargetApplyBtn) {
+								editsModalElements.facialTargetApplyBtn.style.borderColor = "#55ff55";
+								setTimeout(() => {
+									if (typeof updateLocalEditsUI === "function") updateLocalEditsUI();
+								}, 600);
+							}
+						}
 					})
 				])
 			]),
@@ -13992,7 +15497,7 @@ document.body.appendChild(
 					editsModalElements.camBtnUnderwater = buildElement("button", {
 						className: "spkmod-panel-btn",
 						style: "padding: 6px 4px; font-size: 10px; text-align: center; color: #22d3ee;",
-						innerText: "🫧 " + (t("effectUnderwater") || "Aqua Fantasy"),
+						innerText: "🌊 " + (t("effectUnderwater") || "Aqua Fantasy"),
 						onclick: () => setCameraEffectLocal("underwater")
 					}),
 					editsModalElements.camBtnGoldenHour = buildElement("button", {
@@ -14142,6 +15647,7 @@ setTimeout(() => {
 		makeDraggable(lunHudElements.patchNotesModal, [patchNotesModalElements.headerTitle]);
 	}
 }, 500);
+
 
 // --- SPEAKI BBS (COMMUNITY BULLETIN BOARD) ---
 var bbsModalElements = {
@@ -15647,8 +17153,14 @@ document.body.appendChild(
 		}, [
 			buildElement("div", { style: "display: flex; align-items: center; gap: 6px; cursor: move; user-select: none;" }, [
 				bbsModalElements.headerTitle = buildElement("span", {
-					innerText: "💬 " + (t("bbsTitle") || "SpeakiBBS"),
-					style: "font-weight: bold; font-size: 12px; cursor: move; user-select: none;"
+					innerHTML: (function() {
+						const raw = t("bbsTitle");
+						const titleStr = (!raw || raw === "bbsTitle") ? ":t_280: DarkNet" : (raw.includes(":t_280:") ? raw : ":t_280: " + raw);
+						return typeof renderSpkmodInlineEmojis === "function"
+							? renderSpkmodInlineEmojis(titleStr, "height: 18px; width: 18px; object-fit: contain; vertical-align: middle; margin-right: 4px; display: inline-block; pointer-events: none; user-select: none;")
+							: titleStr;
+					})(),
+					style: "font-weight: bold; font-size: 12px; cursor: move; user-select: none; display: inline-flex; align-items: center;"
 				}),
 				bbsModalElements.countBadge = buildElement("span", {
 					innerText: "0",
@@ -15935,7 +17447,13 @@ updateBbsComposerState();
 applyBbsThemeVisuals();
 function updateBbsI18n() {
 	if (bbsModalElements.headerTitle) {
-		bbsModalElements.headerTitle.innerText = "💬 " + (t("bbsTitle") || "SpeakiBBS");
+		const raw = t("bbsTitle");
+		const titleStr = (!raw || raw === "bbsTitle") ? ":t_280: DarkNet" : (raw.includes(":t_280:") ? raw : ":t_280: " + raw);
+		if (typeof renderSpkmodInlineEmojis === "function") {
+			bbsModalElements.headerTitle.innerHTML = renderSpkmodInlineEmojis(titleStr, "height: 18px; width: 18px; object-fit: contain; vertical-align: middle; margin-right: 4px; display: inline-block; pointer-events: none; user-select: none;");
+		} else {
+			bbsModalElements.headerTitle.innerText = titleStr;
+		}
 	}
 	if (bbsModalElements.emojiBtn) {
 		bbsModalElements.emojiBtn.title = t("bbsEmojiBtnTooltip") || "Insert emoji";
@@ -15945,7 +17463,13 @@ function updateBbsI18n() {
 		bbsModalElements.submitBtn.innerText = "📤 " + (t("bbsPostBtn") || "Post");
 	}
 	if (typeof lunPanelElements !== "undefined" && lunPanelElements.bbsBtn) {
-		lunPanelElements.bbsBtn.title = t("bbsBtnTooltip") || "SpeakiBBS";
+		const rawTip = t("bbsBtnTooltip");
+		const tipStr = (!rawTip || rawTip === "bbsBtnTooltip") ? ":t_280: DarkNet" : (rawTip.includes(":t_280:") ? rawTip : ":t_280: " + rawTip);
+		if (typeof setSpkmodRichTooltip === "function") {
+			setSpkmodRichTooltip(lunPanelElements.bbsBtn, tipStr);
+		} else {
+			lunPanelElements.bbsBtn.title = tipStr;
+		}
 	}
 	if (bbsModalElements.iconOnlyLabel) {
 		bbsModalElements.iconOnlyLabel.innerText = t("bbsIconOnlyLabel") || "Icons only";
@@ -16135,6 +17659,7 @@ let gamepadModalElements = {
 };
 
 window.__showGamepadDiagram = false;
+
 
 function openGamepadModal() {
 	if (lunHudElements.gamepadModal) {
@@ -17022,7 +18547,101 @@ async function translateChatText(text, source, target) {
 	return run;
 }
 
-function maybeTranslateChatMessage(id, name, msg) {
+const LUN_CHAT_PLAYER_PALETTE = [
+	"#ff9eaa", // Soft Rose
+	"#ffd54a", // Warm Gold
+	"#90caf9", // Soft Sky Blue
+	"#ce93d8", // Light Orchid
+	"#ffab91", // Peach Apricot
+	"#fff59d", // Lemon Cream
+	"#9fa8da", // Soft Periwinkle
+	"#f48fb1", // Bubblegum Pink
+	"#d1c4e9", // Lavender Mist
+	"#ffcc80"  // Warm Amber
+];
+const LUN_CHAT_FRIEND_COLOR = "#4dd0e1";
+const LUN_CHAT_PARTY_COLOR = "#69f0ae";
+const lunChatPlayerColorMap = new Map();
+let lunLastChatSpeaker = null;
+let lunLastChatColor = null;
+
+function isPartyMemberChatSpeaker(id, name) {
+	if (id === -1337 || id === -1338) return false;
+	const cleanName = typeof name === "string" ? name.trim() : "";
+	if (!cleanName) return false;
+	if (typeof gameState !== "undefined" && gameState?.myPlayerId != null && id != null && id === gameState.myPlayerId) {
+		return false;
+	}
+	const lowerKey = cleanName.toLowerCase();
+	const myName = ((typeof gameState !== "undefined" && (gameState.myPlayerName || gameState.myStat?.name)) || (typeof document !== "undefined" ? document.querySelector(".sr-player-card__name")?.innerText : "") || "").trim().toLowerCase();
+	if (myName && lowerKey === myName) return false;
+	if (typeof document === "undefined") return false;
+	const partyEls = document.querySelectorAll(".sr-party__name");
+	if (!partyEls || partyEls.length === 0) return false;
+
+	let altKey = "";
+	if (id != null && typeof gameState !== "undefined" && gameState?.remotePlayers?.remotePlayers?.get) {
+		const rp = gameState.remotePlayers.remotePlayers.get(id);
+		if (rp?.info) {
+			const rpName = (rp.info.name || "").trim().toLowerCase();
+			const rpOrig = (rp.info.__spkmodOrigName || "").trim().toLowerCase();
+			if (rpName && rpName !== lowerKey) altKey = rpName;
+			else if (rpOrig && rpOrig !== lowerKey) altKey = rpOrig;
+		}
+	}
+
+	for (let i = 0; i < partyEls.length; i++) {
+		const pName = (partyEls[i].innerText || partyEls[i].textContent || "").trim().toLowerCase();
+		if (pName && (pName === lowerKey || (altKey && pName === altKey))) return true;
+	}
+	return false;
+}
+
+function resolveChatMessageColor(id, name) {
+	if (id === -1337 || id === -1338) return null;
+	const cleanName = typeof name === "string" ? name.trim() : "";
+	if (!cleanName) return null;
+	const lowerKey = cleanName.toLowerCase();
+
+	if (typeof lunGmChatHighlightEnabled !== "undefined" && lunGmChatHighlightEnabled && cleanName.toUpperCase() === "GMDT") {
+		lunLastChatSpeaker = lowerKey;
+		lunLastChatColor = "#ffa726";
+		return "#ffa726";
+	}
+
+	if (typeof lunPartyChatHighlightEnabled !== "undefined" && lunPartyChatHighlightEnabled && isPartyMemberChatSpeaker(id, cleanName)) {
+		lunLastChatSpeaker = lowerKey;
+		lunLastChatColor = LUN_CHAT_PARTY_COLOR;
+		return LUN_CHAT_PARTY_COLOR;
+	}
+
+	if (typeof lunFriendChatHighlightEnabled !== "undefined" && lunFriendChatHighlightEnabled && typeof lunFriendNicknames !== "undefined" && lunFriendNicknames.has(lowerKey)) {
+		lunLastChatSpeaker = lowerKey;
+		lunLastChatColor = LUN_CHAT_FRIEND_COLOR;
+		return LUN_CHAT_FRIEND_COLOR;
+	}
+
+	if (lunLastChatSpeaker === lowerKey && lunLastChatColor && lunLastChatColor !== LUN_CHAT_PARTY_COLOR && lunLastChatColor !== LUN_CHAT_FRIEND_COLOR && lunLastChatColor !== "#ffa726") {
+		return lunLastChatColor;
+	}
+
+	let color = lunChatPlayerColorMap.get(lowerKey);
+	if (!color || color === lunLastChatColor) {
+		const candidates = LUN_CHAT_PLAYER_PALETTE.filter(c => c !== lunLastChatColor);
+		color = candidates[Math.floor(Math.random() * candidates.length)];
+		lunChatPlayerColorMap.set(lowerKey, color);
+	}
+
+	lunLastChatSpeaker = lowerKey;
+	lunLastChatColor = color;
+	return color;
+}
+
+if (typeof lunChatRandomColorsEnabled !== "undefined" && lunChatRandomColorsEnabled && typeof document !== "undefined" && document.body) {
+	document.body.classList.add("spkmod-chat-player-colors-on");
+}
+
+function maybeTranslateChatMessage(id, name, msg, assignedColor) {
 	if (!lunTranslateEnabled) return;
 	if (id === -1337 || id === -1338) return; // skip SpeakiMod's own system/translation lines
 	if (typeof msg !== "string" || !msg.trim()) return;
@@ -17031,7 +18650,7 @@ function maybeTranslateChatMessage(id, name, msg) {
 	const source = guessSourceLang(msg);
 	translateChatText(msg, source, lunTranslateTarget).then(translated => {
 		if (!translated) return;
-		appendColoredChatLine(-1338, `↳ ${name}`, translated);
+		appendColoredChatLine(-1338, `↳ ${name}`, translated, assignedColor);
 	});
 }	
 
@@ -17384,6 +19003,14 @@ spkmodI18nRenderers.push(() => {
 	if (lunPanelElements.resolutionOverrideLabel && typeof lunResolutionOverrideLabel === "function") setText(lunPanelElements.resolutionOverrideLabel, lunResolutionOverrideLabel());
 	if (lunPanelElements.gmChatToggleLabel) setText(lunPanelElements.gmChatToggleLabel, t("gmChatToggleLabel"));
 	if (lunPanelElements.friendChatToggleLabel) setText(lunPanelElements.friendChatToggleLabel, t("friendChatToggleLabel"));
+	if (lunPanelElements.partyChatToggleLabel) {
+		const s = t("partyChatToggleLabel");
+		setText(lunPanelElements.partyChatToggleLabel, (!s || s === "partyChatToggleLabel") ? "Highlight Party Members in Chat" : s);
+	}
+	if (lunPanelElements.chatRandomColorsLabel) {
+		const s = t("chatRandomColorsToggleLabel");
+		setText(lunPanelElements.chatRandomColorsLabel, (!s || s === "chatRandomColorsToggleLabel") ? "Colorize Player Messages" : s);
+	}
 	if (lunPanelElements.mentionAlertToggleLabel) setText(lunPanelElements.mentionAlertToggleLabel, t("mentionAlertToggleLabel"));
 	if (lunPanelElements.mentionPingToggleLabel) setText(lunPanelElements.mentionPingToggleLabel, t("mentionPingToggleLabel"));
 	if (lunPanelElements.hideKnownBotsLabel) setText(lunPanelElements.hideKnownBotsLabel, t("hideKnownBotsToggleLabel"));
@@ -17412,11 +19039,9 @@ spkmodI18nRenderers.push(() => {
 	if (lunPanelElements.minigameTrackerLabel) setText(lunPanelElements.minigameTrackerLabel, t("minigameTrackerToggleLabel"));
 	if (lunPanelElements.settingsCatGeneral) setText(lunPanelElements.settingsCatGeneral, "💬 " + t("settingsCatGeneral"));
 	if (lunPanelElements.settingsCatHUD) setText(lunPanelElements.settingsCatHUD, "📊 " + t("settingsCatHUD"));
-	if (lunPanelElements.eventBtn) lunPanelElements.eventBtn.title = t("eventInfoBtnTooltip");
-	if (lunPanelElements.patchNotesBtn) lunPanelElements.patchNotesBtn.title = t("patchNotesBtnTooltip");
-	if (lunPanelElements.bbsBtn) lunPanelElements.bbsBtn.title = t("bbsBtnTooltip");
-	if (lunPanelElements.mapBtn) lunPanelElements.mapBtn.title = t("mapModalTitle");
-	if (lunPanelElements.questsBtn) lunPanelElements.questsBtn.title = t("questsBtnTooltip") || "Quests Checklist";
+	if (typeof updateHudIconTooltips === "function") {
+		updateHudIconTooltips();
+	}
 	if (typeof mapModalElements !== "undefined" && mapModalElements.titleLabel) mapModalElements.titleLabel.innerText = t("mapModalTitle");
 	if (window.questsModalElements && window.questsModalElements.headerTitle) {
 		window.questsModalElements.headerTitle.innerText = "📋 " + (t("questsModalTitle") || "Quests Checklist");
@@ -17437,6 +19062,14 @@ spkmodI18nRenderers.push(() => {
 		renderPatchNotesUI();
 	}
 	if (lunPanelElements.gamepadRumbleLabel) setText(lunPanelElements.gamepadRumbleLabel, t("gamepadRumbleToggleLabel"));
+	if (lunPanelElements.separatePanelLabel) setText(lunPanelElements.separatePanelLabel, t("separatePanel") || "Separate Action Panel (Mobile)");
+	if (lunPanelElements.hidePlayerLevelsLabel) setText(lunPanelElements.hidePlayerLevelsLabel, t("hidePlayerLevelsLabel"));
+	if (lunPanelElements.channelTrackerToggleLabel) setText(lunPanelElements.channelTrackerToggleLabel, t("channelTrackerToggleLabel"));
+	if (lunPanelElements.telemetryToggleLabel) setText(lunPanelElements.telemetryToggleLabel, t("telemetrySettingLabel"));
+	if (lunPanelElements.muteMinimizedLabel) setText(lunPanelElements.muteMinimizedLabel, t("muteMinimizedToggleLabel") || "Mute Game when Minimized");
+	if (lunPanelElements.outgoingTranslateSelect && lunPanelElements.outgoingTranslateSelect.options && lunPanelElements.outgoingTranslateSelect.options[0]) {
+		lunPanelElements.outgoingTranslateSelect.options[0].innerText = t("outgoingTranslateAuto");
+	}
 	if (lunPanelElements.disableRightClickPinningLabel) setText(lunPanelElements.disableRightClickPinningLabel, t("disableRightClickPinningLabel") || "Disable Double Right-Click Pinning");
 	if (lunPanelElements.discordRpcLabel) setText(lunPanelElements.discordRpcLabel, t("discordRpcToggleLabel") || "Discord Activity (RPC)");
 	if (lunPanelElements.uiScaleLabel) setText(lunPanelElements.uiScaleLabel, t("uiScaleLabel"));
@@ -17502,6 +19135,19 @@ spkmodI18nRenderers.push(() => {
 		if (lunPanelElements.bgOpacitySelect.options[5]) lunPanelElements.bgOpacitySelect.options[5].innerText = t("bgOpacityHeavyGlass") || "Heavy Glass";
 	}
 	if (lunPanelElements.hudBgLabel) setText(lunPanelElements.hudBgLabel, t("hudBackgroundLabel"));
+	if (lunPanelElements.fontPresetLabel) setText(lunPanelElements.fontPresetLabel, t("fontPresetLabel") || "Game Font");
+	if (lunPanelElements.fontPresetSelect && lunPanelElements.fontPresetSelect.options) {
+		const opts = lunPanelElements.fontPresetSelect.options;
+		if (opts[0]) opts[0].innerText = t("fontPresetDefault") || "Default";
+		if (opts[1]) opts[1].innerText = t("fontPresetTrickcalPop") || "Pop (Auto CJK)";
+		if (opts[6]) opts[6].innerText = t("fontPresetSerif") || "Serif (Mincho)";
+		if (opts[7]) opts[7].innerText = t("fontPresetRounded") || "Rounded (Maru)";
+		if (opts[8]) opts[8].innerText = t("fontPresetPixel") || "Pixel / Retro";
+		if (opts[9]) opts[9].innerText = t("fontPresetMonospace") || "Monospace";
+		if (opts[10]) opts[10].innerText = t("fontPresetCustom") || "Custom OS Font...";
+	}
+	if (lunPanelElements.customFontInputLabel) setText(lunPanelElements.customFontInputLabel, t("customFontInputLabel") || "Font:");
+	if (lunPanelElements.customFontInput) lunPanelElements.customFontInput.placeholder = t("customFontPlaceholder") || "Meiryo, Yu Mincho...";
 	if (lunPanelElements.accentColorLabel) setText(lunPanelElements.accentColorLabel, t("accentColorLabel"));
 	if (lunPanelElements.exportSettingsBtn) setText(lunPanelElements.exportSettingsBtn, t("exportSettingsBtn"));
 	if (lunPanelElements.importSettingsBtn) setText(lunPanelElements.importSettingsBtn, t("importSettingsBtn"));
@@ -17512,15 +19158,15 @@ spkmodI18nRenderers.push(() => {
 	refreshGamepadModalI18n();
 	if (typeof updateHudBgDropdown === 'function') updateHudBgDropdown();
 
-	/*
+	
 	// ORIGINAL EVENT CODE - KEEP FOR WHEN EVENT COMES BACK
 	setText(lunHudElements.currencyTracker, lunLastGold === null
 		? t("currencyTracker", "--", "--", "--")
 		: t("currencyTracker", lunLastGold.toLocaleString(), lunLastElif.toLocaleString(), typeof lunLastSpkCoin !== 'undefined' && lunLastSpkCoin !== null ? lunLastSpkCoin.toLocaleString() : "--"));
-	*/
-	setText(lunHudElements.currencyTracker, lunLastGold === null
-		? t("currencyTracker", "--", "--", "--").replace(/ \| 🟣.*/, "")
-		: t("currencyTracker", lunLastGold.toLocaleString(), lunLastElif.toLocaleString(), "").replace(/ \| 🟣.*/, ""));
+	
+	// setText(lunHudElements.currencyTracker, lunLastGold === null
+	// 	? t("currencyTracker", "--", "--", "--").replace(/ \| 🟣.*/, "")
+	// 	: t("currencyTracker", lunLastGold.toLocaleString(), lunLastElif.toLocaleString(), "").replace(/ \| 🟣.*/, ""));
 	setText(lunHudElements.sessionGoldTracker, t("sessionGoldText", "--", "--"));
 	if (!lunPinnedQuestId) setText(lunHudElements.pinnedQuest.content, t("pinnedQuestDefault"));
 
@@ -17547,6 +19193,7 @@ var lunPinnedQuestPeriod = null;
 var lunPinnedQuestId = 0;
 var lunPinnedQuestContent = null;
 var lunPinnedQuestNextQueryTick = 0;
+
 
 function getQuestDisplayText(quest) {
 	if (!quest) return "";
@@ -18021,9 +19668,11 @@ var questsModalElements = window.questsModalElements = window.questsModalElement
 function buildQuestsModal() {
 	if (lunHudElements.questsModal) return;
 
+	const shouldBeOpen = (window.localStorage && localStorage.getItem("spkmod-quests-modal-open")) === "true";
+
 	lunHudElements.questsModal = buildElement("div", {
 		id: "spkmod-quests-modal",
-		className: "hidden",
+		className: shouldBeOpen ? "" : "hidden",
 		style: `display: flex; flex-direction: column; gap: 6px; padding: 8px 10px; box-sizing: border-box; min-width: 380px; max-width: 95vw; max-height: 80vh; background: #000C; border: ${spkmodBorderWidth} solid #DDD; border-radius: 8px; position: fixed; z-index: 600000; color: #FFF; user-select: none;`
 	}, [
 		// Header Row
@@ -18074,6 +19723,7 @@ function buildQuestsModal() {
 					onclick: (e) => {
 						e.stopPropagation();
 						lunHudElements.questsModal.classList.add("hidden");
+						if (window.localStorage) localStorage.setItem("spkmod-quests-modal-open", "false");
 					}
 				})
 			])
@@ -18361,14 +20011,24 @@ window.toggleQuestsModal = function() {
 		if (typeof bringToFront === "function") bringToFront(lunHudElements.questsModal);
 		if (typeof fetchAllQuests === "function") fetchAllQuests();
 		renderQuestChecklist();
+		if (window.localStorage) localStorage.setItem("spkmod-quests-modal-open", "true");
 	} else {
 		lunHudElements.questsModal.classList.add("hidden");
+		if (window.localStorage) localStorage.setItem("spkmod-quests-modal-open", "false");
 	}
 };
 
 // Initialize Quests Modal structure
 setTimeout(() => {
 	buildQuestsModal();
+	const shouldBeOpen = (window.localStorage && localStorage.getItem("spkmod-quests-modal-open")) === "true";
+	if (shouldBeOpen && lunHudElements.questsModal) {
+		if (typeof positionModalNicely === "function") positionModalNicely(lunHudElements.questsModal);
+		lunHudElements.questsModal.classList.remove("hidden");
+		if (typeof bringToFront === "function") bringToFront(lunHudElements.questsModal);
+		if (typeof fetchAllQuests === "function") fetchAllQuests();
+		if (typeof renderQuestChecklist === "function") renderQuestChecklist();
+	}
 }, 600);
 
 function matchQuestFromTitleText(titleText, item) {
@@ -18745,6 +20405,8 @@ if (!window.__beyBladeLoopRunning) {
 
 	requestAnimationFrame(beyBladeRenderLoop);
 }
+
+
 // --- MOD PLAYERS TELEMETRY & HOURLY PING ---
 var lunModPlayersCounts = { count1h: null, count24h: null, count7d: null, countAllTime: null };
 var lunLastTelemetryPingTime = 0;
@@ -19207,7 +20869,9 @@ function tick() {
 			// ORIGINAL EVENT CODE - KEEP FOR WHEN EVENT COMES BACK
 			setText(lunHudElements.currencyTracker, t("currencyTracker", formatCurrency(lunLastGold), formatCurrency(lunLastElif), formatCurrency(lunLastSpkCoin)));
 			*/
-			setText(lunHudElements.currencyTracker, t("currencyTracker", formatCurrency(lunLastGold), formatCurrency(lunLastElif), "").replace(/ \| 🟣.*/, ""));
+			setText(lunHudElements.currencyTracker, t("currencyTracker", formatCurrency(lunLastGold), formatCurrency(lunLastElif), formatCurrency(lunLastSpkCoin)));
+			// To disable
+			// setText(lunHudElements.currencyTracker, t("currencyTracker", formatCurrency(lunLastGold), formatCurrency(lunLastElif), "").replace(/ \| 🟣.*/, ""));
 
 			if (lunSessionStartGold === null) {
 				lunSessionStartGold = lunLastGold;
@@ -19280,48 +20944,68 @@ function tick() {
 
 
 window.spkmodForceNametagRedraw = function() {
-    if (typeof gameState === 'undefined' || !gameState) return;
-    
-    const redrawAvatar = (entity) => {
-        if (entity && entity.avatar && typeof entity.avatar.setLabel === 'function' && entity.info) {
+	if (typeof gameState === 'undefined' || !gameState) return;
+
+	const redrawAvatar = (entity) => {
+		if (!entity || !entity.avatar || typeof entity.avatar.setLabel !== 'function') return;
+		hookAvatarLabel(entity);
+		if (entity.info && entity.info.name) {
 			const lvl = entity.info.__spkmodOrigLevel || entity.info.level || 1;
-            entity.avatar.setLabel("LV" + lvl + " " + (entity.info.name || ""));
-        }
-    };
-    
-    if (gameState.remotePlayers && gameState.remotePlayers.remotePlayers) {
-        gameState.remotePlayers.remotePlayers.forEach(redrawAvatar);
-    }
-    if (gameState.playerContainer) {
-        const lvl = (gameState.myStat && gameState.myStat.level) ? gameState.myStat.level : 1;
-        const name = (gameState.myPlayerName || (gameState.myStat && gameState.myStat.name)) || "";
-        if (gameState.playerContainer.avatar && typeof gameState.playerContainer.avatar.setLabel === 'function') {
-            gameState.playerContainer.avatar.setLabel("LV" + lvl + " " + name);
-        }
-    }
+			entity.avatar.setLabel("LV" + lvl + " " + entity.info.name);
+		} else if (typeof entity.avatar.__spkmodLastRawLabel === "string" && entity.avatar.__spkmodLastRawLabel) {
+			entity.avatar.setLabel(entity.avatar.__spkmodLastRawLabel);
+		}
+	};
+
+	if (gameState.remotePlayers && gameState.remotePlayers.remotePlayers) {
+		gameState.remotePlayers.remotePlayers.forEach(redrawAvatar);
+	}
+	if (gameState.remotePetRegistry && gameState.remotePetRegistry.pets) {
+		gameState.remotePetRegistry.pets.forEach(redrawAvatar);
+	}
+	if (gameState.remoteDroneCoreRegistry && gameState.remoteDroneCoreRegistry.droneCores) {
+		gameState.remoteDroneCoreRegistry.droneCores.forEach(redrawAvatar);
+	}
+
+	const lvl = (gameState.myStat && gameState.myStat.level) ? gameState.myStat.level : 1;
+	const name = (gameState.myPlayerName || (gameState.myStat && gameState.myStat.name)) || "";
+	if (gameState.playerContainer && gameState.playerContainer.avatar && typeof gameState.playerContainer.avatar.setLabel === 'function') {
+		hookAvatarLabel(gameState.playerContainer, gameState.playerContainer);
+		if (name) gameState.playerContainer.avatar.setLabel("LV" + lvl + " " + name);
+	}
+	if (gameState.localAvatar && typeof gameState.localAvatar.setLabel === 'function') {
+		hookAvatarLabel({ avatar: gameState.localAvatar, container: gameState.playerContainer, isLocalPlayer: true }, gameState.playerContainer);
+		if (name) gameState.localAvatar.setLabel("LV" + lvl + " " + name);
+	}
 };
 
-function hookAvatarLabel(entity) {
+function hookAvatarLabel(entity, explicitContainer) {
 	if (!entity || !entity.avatar) return;
 	const avatar = entity.avatar;
 	if (typeof avatar.setLabel !== 'function' || avatar.__spkmodLabelPatched) return;
-	
+
+	const resolveContainer = () => explicitContainer || entity.container || entity.root || avatar.root || (typeof entity.traverse === 'function' ? entity : null);
+
 	const origSetLabel = avatar.setLabel;
 	avatar.setLabel = function(text, ...args) {
+		if (typeof text === 'string' && text.length > 0 && (!lunHidePlayerLevels || text.startsWith("LV"))) {
+			avatar.__spkmodLastRawLabel = text;
+		}
 		if (lunHidePlayerLevels && typeof text === 'string' && text.startsWith("LV")) {
 			const spaceIdx = text.indexOf(" ");
 			if (spaceIdx !== -1) {
 				text = text.substring(spaceIdx + 1); // remove "LVxxx "
 			}
 		}
-		
+
 		try {
-			if (entity && entity.container && typeof entity.container.traverse === 'function') {
-				entity.container.traverse(obj => {
+			const targetContainer = resolveContainer();
+			if (targetContainer && typeof targetContainer.traverse === 'function') {
+				targetContainer.traverse(obj => {
 					// Position check ensures we only hit the floating nametag sprite above the player
 					if (obj && obj.isSprite && obj.material && obj.material.map && obj.position && obj.position.y > 1.0) {
 						obj.material.map.dispose();
-						
+
 						if (obj.material.map.image && typeof obj.material.map.image.getContext === 'function') {
 							const ctx = obj.material.map.image.getContext('2d');
 							ctx.clearRect(0, 0, obj.material.map.image.width, obj.material.map.image.height);
@@ -19334,13 +21018,13 @@ function hookAvatarLabel(entity) {
 		return origSetLabel.call(this, text, ...args);
 	};
 	avatar.__spkmodLabelPatched = true;
-	
-	// Force redraw with current text if setting is on to apply immediately
-	if (lunHidePlayerLevels) {
+
+	// Force redraw with current text if level-hiding or a custom font is active
+	if (lunHidePlayerLevels || (typeof lunFontPreset !== "undefined" && lunFontPreset !== "default")) {
 		if (entity.info && entity.info.name) {
 			const lvl = entity.info.__spkmodOrigLevel || entity.info.level || 1;
 			avatar.setLabel("LV" + lvl + " " + entity.info.name);
-		} else if (entity === gameState.playerContainer) {
+		} else if (entity === gameState.playerContainer || entity.isLocalPlayer) {
 			const lvl = (gameState.myStat && gameState.myStat.level) ? gameState.myStat.level : 1;
 			const name = (gameState.myPlayerName || (gameState.myStat && gameState.myStat.name)) || "";
 			if (name) avatar.setLabel("LV" + lvl + " " + name);
@@ -19366,7 +21050,10 @@ function hookAvatarLabel(entity) {
 	}
 
 	if (gameState.playerContainer && gameState.playerContainer.avatar) {
-		hookAvatarLabel(gameState.playerContainer);
+		hookAvatarLabel(gameState.playerContainer, gameState.playerContainer);
+	}
+	if (gameState.localAvatar && typeof gameState.localAvatar.setLabel === 'function') {
+		hookAvatarLabel({ avatar: gameState.localAvatar, container: gameState.playerContainer, isLocalPlayer: true }, gameState.playerContainer);
 	}
 
 	let partyNames = null;
@@ -19416,7 +21103,7 @@ function hookAvatarLabel(entity) {
 			maintainChromaKeyColor();
 		}
 	}
-	if (typeof lunLockedFacialExpression !== "undefined" && lunLockedFacialExpression !== "none" && typeof maintainLockedFacialExpression === "function") {
+	if (typeof maintainLockedFacialExpression === "function") {
 		maintainLockedFacialExpression();
 	}
 
@@ -19557,6 +21244,7 @@ var hkChatBoxAppend = (id, name, msg) => {
 	if (window.__speakiOrigChatBoxAppend) return window.__speakiOrigChatBoxAppend(id, name, msg);
 	if (typeof gameState !== "undefined" && gameState?.chatBox?.append) return gameState.chatBox.append(id, name, msg);
 };
+
 
 function hookGameStateOnce() {
 	if (typeof gameState === "undefined" || !gameState) return false;
@@ -20152,6 +21840,10 @@ function hookGameStateOnce() {
 				}
 			}
 
+			const assignedMsgColor = (id !== -1337 && id !== -1338 && filteredMsg && filteredMsg.trim())
+				? resolveChatMessageColor(id, name)
+				: null;
+
 			if (filteredMsg && filteredMsg.trim()) {
 				observeNextChatNode(filteredMsg, (bodyText, rowNode) => {
 					if (isMention) {
@@ -20177,6 +21869,10 @@ function hookGameStateOnce() {
 					}
 
 					if (id !== -1337 && id !== -1338) {
+						if (assignedMsgColor) {
+							bodyText.style.setProperty("--spkmod-msg-color", assignedMsgColor);
+							bodyText.classList.add("spkmod-colored-msg-el");
+						}
 						bodyText.classList.add("spkmod-clickable-line");
 						bodyText.title = t("clickToTranslateTooltip");
 						bodyText.addEventListener("click", (e) => {
@@ -20189,14 +21885,23 @@ function hookGameStateOnce() {
 									insertEmojiIntoChat(tag);
 								}
 							} else {
-								forceTranslateMessage(name, filteredMsg);
+								forceTranslateMessage(name, filteredMsg, assignedMsgColor);
 							}
 						});
 						
-						const senderEl = rowNode.classList?.contains("sr-chatbox__sender") ? rowNode : rowNode.querySelector?.(".sr-chatbox__sender");
+						const rowEl = (rowNode && rowNode.closest?.(".sr-chatbox__row")) || bodyText.closest?.(".sr-chatbox__row") || rowNode;
+						const senderEl = rowEl?.classList?.contains("sr-chatbox__sender") ? rowEl : rowEl?.querySelector?.(".sr-chatbox__sender");
 						if (senderEl) {
-							if (lunFriendChatHighlightEnabled && name && lunFriendNicknames.has(name.trim().toLowerCase())) {
+							if (lunGmChatHighlightEnabled && name && name.trim().toUpperCase() === "GMDT") {
+								senderEl.classList.add("spkmod-gm-sender");
+							} else if (typeof lunPartyChatHighlightEnabled !== "undefined" && lunPartyChatHighlightEnabled && isPartyMemberChatSpeaker(id, name)) {
+								senderEl.classList.add("spkmod-party-sender");
+							} else if (lunFriendChatHighlightEnabled && name && lunFriendNicknames.has(name.trim().toLowerCase())) {
 								senderEl.classList.add("spkmod-friend-sender");
+							}
+							if (assignedMsgColor) {
+								senderEl.style.setProperty("--spkmod-msg-color", assignedMsgColor);
+								senderEl.classList.add("spkmod-colored-msg-el");
 							}
 							let currentText = senderEl.innerText;
 							
@@ -20225,7 +21930,7 @@ function hookGameStateOnce() {
 				});
 			}
 
-			maybeTranslateChatMessage(id, name, filteredMsg);
+			maybeTranslateChatMessage(id, name, filteredMsg, assignedMsgColor);
 			return result;
 		};
 		gameState.chatBox.__speakiAppendHooked = true;
@@ -20243,12 +21948,22 @@ function hookGameStateOnce() {
 window.hookGameStateOnce = hookGameStateOnce;
 hookGameStateOnce();
 
-function appendColoredChatLine(id, name, text) {
+function appendColoredChatLine(id, name, text, customColor) {
 	const scrollEl = updateChatScrollTracking();
 	const wasAtBottom = !lunChatUserScrolledUp && (!scrollEl || (scrollEl.scrollHeight - scrollEl.scrollTop - scrollEl.clientHeight <= 45));
 
-	observeNextChatNode(text, (bodyText) => {
+	observeNextChatNode(text, (bodyText, rowNode) => {
 		bodyText.classList.add("spkmod-translated-line");
+		if (customColor) {
+			bodyText.style.setProperty("--spkmod-msg-color", customColor);
+			bodyText.classList.add("spkmod-colored-msg-el");
+			const rowEl = (rowNode && rowNode.closest?.(".sr-chatbox__row")) || bodyText.closest?.(".sr-chatbox__row") || rowNode;
+			const senderEl = rowEl?.classList?.contains("sr-chatbox__sender") ? rowEl : rowEl?.querySelector?.(".sr-chatbox__sender");
+			if (senderEl) {
+				senderEl.style.setProperty("--spkmod-msg-color", customColor);
+				senderEl.classList.add("spkmod-colored-msg-el");
+			}
+		}
 
 		const spkmodAllEmojis = {...(typeof lunCustomEmojis !== "undefined" ? lunCustomEmojis : {}), ...(typeof lunTrickcalEmojis !== "undefined" ? lunTrickcalEmojis : {}), ...(typeof lunTrickcal2Emojis !== "undefined" ? lunTrickcal2Emojis : {}), ...(typeof lunTrickcal3Emojis !== "undefined" ? lunTrickcal3Emojis : {})};
 		if (Object.keys(spkmodAllEmojis).length > 0) {
@@ -20321,7 +22036,7 @@ function showTranslateSourcePicker(guess, onPick) {
 	document.body.appendChild(picker);
 }
 
-function forceTranslateMessage(name, msg) {
+function forceTranslateMessage(name, msg, assignedColor) {
 	const guess = guessSourceLang(msg);
 	showTranslateSourcePicker(guess, source => {
 		translateChatText(msg, source, lunTranslateTarget).then(translated => {
@@ -20329,7 +22044,7 @@ function forceTranslateMessage(name, msg) {
 				chatLog(t("translateFailedMsg"));
 				return;
 			}
-			appendColoredChatLine(-1338, `↳ ${name}`, translated);
+			appendColoredChatLine(-1338, `↳ ${name}`, translated, assignedColor);
 		});
 	});
 }
@@ -20986,6 +22701,10 @@ function ensureEmojiTooltip() {
 	};
 
 	document.addEventListener("mouseover", (e) => {
+		if (typeof spkmodIsMobile === "function" && spkmodIsMobile()) return;
+		if (typeof window.speakiMobile !== "undefined") return;
+		if (typeof window.matchMedia === "function" && window.matchMedia("(pointer: coarse)").matches && (typeof navigator !== "undefined" && navigator.maxTouchPoints > 0)) return;
+
 		const target = e.target.closest('.spkmod-custom-emoji');
 		if (target) {
 			const url = target.getAttribute("data-url");
@@ -21011,6 +22730,13 @@ function ensureEmojiTooltip() {
 			lunEmojiPreviewTooltip.style.display = "none";
 		}
 	});
+
+	window.addEventListener("touchstart", () => {
+		if (lunEmojiPreviewTooltip) {
+			lunEmojiPreviewCurrentTarget = null;
+			lunEmojiPreviewTooltip.style.display = "none";
+		}
+	}, { passive: true, capture: true });
 
 	window.addEventListener("scroll", () => {
 		if (lunEmojiPreviewTooltip) {
@@ -21171,10 +22897,6 @@ if (typeof spkmodI18nRenderers !== 'undefined') {
         }
     });
 }
-
-
-
-
 
 
 const SPKMOD_ACCOUNTS_KEY = "spkmod-saved-accounts";
@@ -21690,7 +23412,7 @@ function injectQuickLoginIntoSettingsModal() {
 
 	const section = document.createElement("div");
 	section.id = "spkmod-settings-ql-section";
-	section.style.cssText = "display: none; margin-top: 14px; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 10px;";
+	section.style.cssText = "display: none; contain: inline-size; width: 100%; box-sizing: border-box; margin-top: 14px; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 10px;";
 
 	const title = document.createElement("span");
 	title.className = "spkmod-settings-section-title";
@@ -21891,6 +23613,11 @@ function onInGameReady() {
 
 	injectQuickLoginIntoSettingsModal();
 	initQuickLoginInGamePrompt();
+	if (typeof lunFontPreset !== "undefined" && lunFontPreset !== "default" && typeof window.spkmodForceNametagRedraw === "function") {
+		setTimeout(() => {
+			if (typeof window.spkmodForceNametagRedraw === "function") window.spkmodForceNametagRedraw();
+		}, 400);
+	}
 	if (typeof checkAndShowNewsPopup === "function") {
 		setTimeout(() => {
 			checkAndShowNewsPopup();
