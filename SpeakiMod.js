@@ -1625,6 +1625,8 @@ var lunPanelElements = {
 	resolutionOverrideRow: null,
 	resolutionOverrideLabel: null,
 	resolutionOverrideInput: null,
+	aaModeLabel: null,
+	aaModeSelect: null,
 	discordRpcLabel: null,
 	discordRpcToggleInput: null,
 	muteMinimizedLabel: null,
@@ -2395,6 +2397,22 @@ function setDisableRightClickPinning(disabled) {
 	if (window.localStorage) localStorage.setItem("spkmod-disable-right-click-pinning", lunDisableRightClickPinning ? "true" : "false");
 	if (lunPanelElements.disableRightClickPinningToggleInput) {
 		lunPanelElements.disableRightClickPinningToggleInput.checked = lunDisableRightClickPinning;
+	}
+}
+
+var lunAAMode = window.spkmodAAMode || "msaa";
+function setAAMode(mode) {
+	if (mode !== "off" && mode !== "smaa" && mode !== "taa") mode = "msaa";
+	lunAAMode = mode;
+	if (window.localStorage) localStorage.setItem("spkmod-aa-mode", mode);
+	window.spkmodAAMode = mode;
+	if (window.spkmodAAPipeline) {
+		if (mode === "smaa" || mode === "taa") window.spkmodAAPipeline.load();
+		else window.spkmodAAPipeline.dispose();
+	}
+	// Hardware MSAA is a WebGL context attribute: it only changes when the page is reloaded.
+	if ((mode === "msaa") !== !!window.spkmodAACtxMsaa) {
+		if (confirm("Anti-aliasing change needs a reload to take effect. Reload now?")) location.reload();
 	}
 }
 
@@ -6723,6 +6741,23 @@ document.body.appendChild(
 							setResolutionOverride(e.target.value);
 						}
 					})
+				]),
+				buildElement("div", { className: "spkmod-panel-cat" }, [
+					lunPanelElements.aaModeLabel = buildElement("span", {
+						style: "color: #fff; font-size: 11px; font-weight: bold; user-select: none; flex: 1;",
+						innerText: "Anti-Aliasing"
+					}),
+					lunPanelElements.aaModeSelect = buildElement("select", {
+						className: "spkmod-panel-combo",
+						style: "flex: 0 0 110px; width: 110px; height: 24px; padding: 0 4px; font-size: 9pt; box-sizing: border-box;",
+						value: lunAAMode,
+						onchange: e => setAAMode(e.target.value)
+					}, [
+						["msaa", "Default (MSAA)"],
+						["off", "Off"],
+						["smaa", "SMAA"],
+						["taa", "TAA"]
+					].map(([v, label]) => buildElement("option", { value: v, innerText: label })))
 				]),
 				buildElement("div", { className: "spkmod-panel-cat" }, [
 					lunPanelElements.gmChatToggleLabel = buildElement("span", {
@@ -12465,6 +12500,244 @@ async function spkmodEnsureThree() {
 
 	return _spkmodThreePromise;
 }
+
+// ===== SpeakiMod+ Anti-Aliasing: Off / SMAA / TAA =====
+(function () {
+	const BASE = "https://esm.sh/v135/three@0.185.0";
+
+	function halton(index, base) {
+		let f = 1, r = 0, i = index;
+		while (i > 0) { f /= base; r += f * (i % base); i = Math.floor(i / base); }
+		return r;
+	}
+
+	const TAA_VERT = `
+		varying vec2 vUv;
+		void main() {
+			vUv = uv;
+			gl_Position = vec4(position.xy, 0.0, 1.0);
+		}`;
+
+	const TAA_FRAG = `
+		uniform sampler2D tCurrent;
+		uniform sampler2D tHistory;
+		uniform sampler2D tDepth;
+		uniform mat4 uInvViewProjCurr;
+		uniform mat4 uViewProjPrev;
+		uniform vec2 uTexel;
+		uniform float uBlend;
+		uniform float uHistoryValid;
+		varying vec2 vUv;
+
+		void main() {
+			vec2 tx = vec2(uTexel.x, 0.0);
+			vec2 ty = vec2(0.0, uTexel.y);
+
+			vec3 c0 = texture2D(tCurrent, vUv).rgb;
+			vec3 cL = texture2D(tCurrent, vUv - tx).rgb;
+			vec3 cR = texture2D(tCurrent, vUv + tx).rgb;
+			vec3 cD = texture2D(tCurrent, vUv - ty).rgb;
+			vec3 cU = texture2D(tCurrent, vUv + ty).rgb;
+			vec3 mn = min(c0, min(min(cL, cR), min(cD, cU)));
+			vec3 mx = max(c0, max(max(cL, cR), max(cD, cU)));
+
+			// closest depth in a cross, so moving edges reproject with the front surface
+			float d = texture2D(tDepth, vUv).x;
+			d = min(d, texture2D(tDepth, vUv - tx).x);
+			d = min(d, texture2D(tDepth, vUv + tx).x);
+			d = min(d, texture2D(tDepth, vUv - ty).x);
+			d = min(d, texture2D(tDepth, vUv + ty).x);
+
+			vec4 ndc = vec4(vUv * 2.0 - 1.0, d * 2.0 - 1.0, 1.0);
+			vec4 wp = uInvViewProjCurr * ndc;
+			wp /= wp.w;
+			vec4 pc = uViewProjPrev * wp;
+			vec2 puv = pc.xy / pc.w * 0.5 + 0.5;
+
+			vec3 res = c0;
+			if (uHistoryValid > 0.5 && pc.w > 0.0 &&
+				all(greaterThanEqual(puv, vec2(0.0))) && all(lessThanEqual(puv, vec2(1.0)))) {
+				vec3 h = texture2D(tHistory, puv).rgb;
+				h = clamp(h, mn, mx);
+				float motion = length((puv - vUv) / uTexel);
+				float k = clamp(uBlend + motion * 0.01, uBlend, 0.4);
+				res = mix(h, c0, k);
+			}
+			gl_FragColor = vec4(res, 1.0);
+		}`;
+
+	const P = {
+		ready: false,
+		failed: false,
+		loading: null,
+		T: null,
+		SMAAPass: null,
+		OutputPass: null,
+		FullScreenQuad: null,
+		w: 0, h: 0,
+		taaDepth: null,
+		frame: 0,
+		historyValid: false,
+		hist: [null, null],
+		cur: 0,
+		sceneRT: null,
+		smaaRT: null,
+
+		load() {
+			if (this.loading) return this.loading;
+			this.loading = (async () => {
+				const T = await spkmodEnsureThree();
+				const [smaa, out, pass] = await Promise.all([
+					import(BASE + "/examples/jsm/postprocessing/SMAAPass.js"),
+					import(BASE + "/examples/jsm/postprocessing/OutputPass.js"),
+					import(BASE + "/examples/jsm/postprocessing/Pass.js")
+				]);
+				this.T = T;
+				this.SMAAPass = smaa.SMAAPass;
+				this.OutputPass = out.OutputPass;
+				this.FullScreenQuad = pass.FullScreenQuad;
+				this.size = new T.Vector2();
+				this.vpCurr = new T.Matrix4();
+				this.invVpCurr = new T.Matrix4();
+				this.vpPrev = new T.Matrix4();
+				this.ready = true;
+				console.log("[SpeakiMod+] AA pipeline ready");
+			})().catch(e => {
+				this.failed = true;
+				console.warn("[SpeakiMod+] AA pipeline failed to load; rendering without post AA", e);
+			});
+			return this.loading;
+		},
+
+		_disposeTargets() {
+			for (const rt of [this.sceneRT, this.smaaRT, this.hist[0], this.hist[1]]) { if (rt) rt.dispose(); }
+			if (this.sceneRT && this.sceneRT.depthTexture) this.sceneRT.depthTexture.dispose();
+			this.sceneRT = this.smaaRT = null;
+			this.hist = [null, null];
+			this.w = this.h = 0;
+			this.historyValid = false;
+		},
+
+		dispose() {
+			this._disposeTargets();
+			if (this.smaaPass) { this.smaaPass.dispose(); this.smaaPass = null; this._smaaW = this._smaaH = 0; }
+			if (this.outputPass) { this.outputPass.dispose(); this.outputPass = null; }
+			if (this.taaMat) { this.taaMat.dispose(); this.taaMat = null; }
+			if (this.taaQuad) { this.taaQuad.dispose(); this.taaQuad = null; }
+		},
+
+		_makeRT(type, withDepthTexture, depthBuffer) {
+			const T = this.T;
+			const opts = { type, depthBuffer: depthBuffer !== false, stencilBuffer: false, minFilter: T.LinearFilter, magFilter: T.LinearFilter };
+			if (withDepthTexture) opts.depthTexture = new T.DepthTexture(this.w, this.h);
+			return new T.WebGLRenderTarget(this.w, this.h, opts);
+		},
+
+		_ensure(renderer, w, h, taa) {
+			const T = this.T;
+			const sizeChanged = (w !== this.w || h !== this.h);
+			if (sizeChanged || this.taaDepth !== taa || !this.sceneRT) {
+				this._disposeTargets();
+				this.w = w; this.h = h;
+				this.taaDepth = taa;
+				const ext = renderer.extensions;
+				const half = ext && (ext.has("EXT_color_buffer_float") || ext.has("EXT_color_buffer_half_float"));
+				const type = half ? T.HalfFloatType : T.UnsignedByteType;
+				this.sceneRT = this._makeRT(type, taa);
+				if (taa) {
+					this.hist = [this._makeRT(type, false, false), this._makeRT(type, false, false)];
+				} else {
+					this.smaaRT = this._makeRT(type, false, false);
+				}
+				this.historyValid = false;
+			}
+			if (!this.outputPass) {
+				this.outputPass = new this.OutputPass();
+				this.outputPass.renderToScreen = true;
+			}
+			if (taa) {
+				if (!this.taaMat) {
+					this.taaMat = new T.ShaderMaterial({
+						uniforms: {
+							tCurrent: { value: null },
+							tHistory: { value: null },
+							tDepth: { value: null },
+							uInvViewProjCurr: { value: new T.Matrix4() },
+							uViewProjPrev: { value: new T.Matrix4() },
+							uTexel: { value: new T.Vector2() },
+							uBlend: { value: 0.1 },
+							uHistoryValid: { value: 0 }
+						},
+						vertexShader: TAA_VERT,
+						fragmentShader: TAA_FRAG,
+						depthTest: false,
+						depthWrite: false
+					});
+					this.taaQuad = new this.FullScreenQuad(this.taaMat);
+				}
+				this.taaMat.uniforms.uTexel.value.set(1 / w, 1 / h);
+			} else {
+				if (!this.smaaPass) { this.smaaPass = new this.SMAAPass(); this._smaaW = 0; }
+				if (this._smaaW !== w || this._smaaH !== h) { this.smaaPass.setSize(w, h); this._smaaW = w; this._smaaH = h; }
+			}
+		},
+
+		render(renderer, scene, camera, original) {
+			if (this.failed) return original();
+			if (!this.ready) { this.load(); return original(); }
+
+			const mode = window.spkmodAAMode;
+			const taa = mode === "taa";
+			try {
+				renderer.getDrawingBufferSize(this.size);
+				const w = this.size.x | 0, h = this.size.y | 0;
+				if (w < 1 || h < 1) return original();
+				this._ensure(renderer, w, h, taa);
+
+				const canJitter = taa && typeof camera.setViewOffset === "function";
+				if (canJitter) {
+					const i = (this.frame++ % 8) + 1;
+					camera.setViewOffset(w, h, halton(i, 2) - 0.5, halton(i, 3) - 0.5, w, h);
+				}
+
+				renderer.setRenderTarget(this.sceneRT);
+				try { original(); }
+				finally { if (canJitter) camera.clearViewOffset(); }
+
+				if (taa) {
+					const u = this.taaMat.uniforms;
+					this.vpCurr.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
+					this.invVpCurr.copy(this.vpCurr).invert();
+					const prev = this.hist[this.cur ^ 1], next = this.hist[this.cur];
+					u.tCurrent.value = this.sceneRT.texture;
+					u.tDepth.value = this.sceneRT.depthTexture;
+					u.tHistory.value = prev.texture;
+					u.uInvViewProjCurr.value.copy(this.invVpCurr);
+					u.uViewProjPrev.value.copy(this.vpPrev);
+					u.uHistoryValid.value = this.historyValid ? 1 : 0;
+					renderer.setRenderTarget(next);
+					this.taaQuad.render(renderer);
+					this.vpPrev.copy(this.vpCurr);
+					this.historyValid = true;
+					this.outputPass.render(renderer, null, next);
+					this.cur ^= 1;
+				} else {
+					this.smaaPass.render(renderer, this.smaaRT, this.sceneRT);
+					this.outputPass.render(renderer, null, this.smaaRT);
+				}
+				renderer.setRenderTarget(null);
+			} catch (e) {
+				this.failed = true;
+				console.error("[SpeakiMod+] AA pipeline error, falling back to direct rendering", e);
+				try { renderer.setRenderTarget(null); } catch (_) {}
+				return original();
+			}
+		}
+	};
+
+	window.spkmodAAPipeline = P;
+	if (window.spkmodAAMode === "smaa" || window.spkmodAAMode === "taa") P.load();
+})();
 
 // Background prefetch Three.js so props spawn with zero lag
 setTimeout(() => {

@@ -25,6 +25,23 @@ try {
 	window.spkmodResolutionOverride = 1;
 }
 
+// Anti-aliasing mode: "msaa" (game default) | "off" | "smaa" | "taa"
+// The WebGL context's hardware MSAA can only be chosen when the context is created,
+// so changing between "msaa" and the others needs a reload (the mod's panel handles that).
+try {
+	const m = localStorage.getItem("spkmod-aa-mode");
+	window.spkmodAAMode = (m === "off" || m === "smaa" || m === "taa") ? m : "msaa";
+} catch (_) {
+	window.spkmodAAMode = "msaa";
+}
+window.spkmodAACtxMsaa = window.spkmodAAMode === "msaa";
+window.spkmodAARender = function (renderer, scene, camera, original) {
+	const p = window.spkmodAAPipeline;
+	const m = window.spkmodAAMode;
+	if (p && (m === "smaa" || m === "taa")) return p.render(renderer, scene, camera, original);
+	return original();
+};
+
 window.injectSpeakiMod = () => {
 	if (window.__speakiModInjected) {
 		if (typeof window.__speakiInitInGame === "function") {
@@ -83,6 +100,19 @@ async function patchScript(og, src) {
 		/shouldRender\((\w+),(\w+)\)\{if\(\2<=0\)return!0;let (\w+)=1e3\/\2\*(\w+);return \1-this\.lastFrameTimeMs<\3\?!1:\(this\.lastFrameTimeMs=\1,!0\)\}/,
 		(_m, e, t, n, k) =>
 			`shouldRender(${e},${t}){if(${t}<=0)return!0;const p=1e3/${t};const d=${e}-this.lastFrameTimeMs;if(d<p*${k})return!1;this.lastFrameTimeMs=d>p*2?${e}:this.lastFrameTimeMs+p;return!0}`
+	);
+
+	// Anti-aliasing: hardware MSAA of the main renderer follows the selected mode
+	code = code.replace(
+		/new (\w+)\(\{antialias:!0\}\);(\w+)\.setSize\(window\.innerWidth,window\.innerHeight\),(\w+)\.appendChild\(\2\.domElement\)/,
+		(_m, R, a, e) =>
+			`new ${R}({antialias:window.spkmodAAMode==="msaa"});${a}.setSize(window.innerWidth,window.innerHeight),${e}.appendChild(${a}.domElement)`
+	);
+
+	// Anti-aliasing: route the main scene render through the optional SMAA/TAA pipeline
+	code = code.replace(
+		/(\w+)\(\)\.outlineEnabled&&!(\w+)\(\)\?(\w+)\.render\((\w+),(\w+)\):(\w+)\.render\(\4,\5\)/,
+		(m0, _S, _E, _L, sc, cam, R) => `window.spkmodAARender(${R},${sc},${cam},()=>(${m0}))`
 	);
 
 	// 1. Rewrite relative asset imports to absolute URLs
