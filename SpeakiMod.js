@@ -4462,33 +4462,31 @@ function suppressGameBgm(mute) {
         if (state.isBgmSuppressed) return;
 
         // 1. Determine and save user's actual volume
-        let currentVol = getUserActualBgmVolume();
-        if (currentVol === null) {
-            if (typeof window.getGameSettings === "function") {
-                try {
-                    const s = window.getGameSettings();
-                    if (s && typeof s.bgmVolume === "number" && Number.isFinite(s.bgmVolume)) {
-                        currentVol = Math.max(0, Math.min(100, s.bgmVolume));
-                    }
-                } catch (_) {}
-            }
-            if (currentVol === null && slider && slider.value !== '') {
-                const n = Number(slider.value);
-                if (Number.isFinite(n)) currentVol = Math.max(0, Math.min(100, n));
-            }
-            if (currentVol === null) {
-                try {
-                    const raw = localStorage.getItem('sr1_settings');
-                    if (raw) {
-                        const s = JSON.parse(raw);
-                        if (typeof s.bgmVolume === "number" && Number.isFinite(s.bgmVolume)) {
-                            currentVol = Math.max(0, Math.min(100, s.bgmVolume));
-                        }
-                    }
-                } catch (_) {}
-            }
-            if (currentVol === null) currentVol = 70; // Native game default is 70
-        }
+        let currentVol = null;
+		if (typeof window.getGameSettings === "function") {
+			try {
+				const s = window.getGameSettings();
+				if (s && typeof s.bgmVolume === "number" && Number.isFinite(s.bgmVolume)) {
+					currentVol = Math.max(0, Math.min(100, s.bgmVolume));
+				}
+			} catch (_) {}
+		}
+		if (currentVol === null && slider && slider.value !== '') {
+			const n = Number(slider.value);
+			if (Number.isFinite(n)) currentVol = Math.max(0, Math.min(100, n));
+		}
+		if (currentVol === null) {
+			try {
+				const raw = localStorage.getItem('sr1_settings');
+                if (raw) {
+					const s = JSON.parse(raw);
+					if (typeof s.bgmVolume === "number" && Number.isFinite(s.bgmVolume)) {
+						currentVol = Math.max(0, Math.min(100, s.bgmVolume));
+					}
+				}
+			} catch (_) {}
+		}
+		if (currentVol === null) currentVol = getUserActualBgmVolume() ?? 70; // Native game default is 70
 
         setUserActualBgmVolume(currentVol);
         state.isBgmSuppressed = true;
