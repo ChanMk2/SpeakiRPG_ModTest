@@ -2475,21 +2475,6 @@ try {
 	}
 } catch (_) {}
 
-try {
-	if (localStorage.getItem("spkmod-is-bgm-suppressed") === "true") {
-		const saved = Number(localStorage.getItem("spkmod-user-bgm-volume"));
-		const raw = localStorage.getItem("sr1_settings");
-		if (raw && Number.isFinite(saved) && saved > 0 && saved <= 100) {
-			const p = JSON.parse(raw);
-			if (p && p.bgmVolume === 0) {
-				p.bgmVolume = saved;
-				localStorage.setItem("sr1_settings", JSON.stringify(p));
-			}
-		}
-		localStorage.setItem("spkmod-is-bgm-suppressed", "false");
-	}
-} catch (_) {}
-
 function isGameMuted() {
 	return lunIsMuted || isMutedByMinimize;
 }
@@ -4273,6 +4258,19 @@ try {
                 s.bgmVolume = window.__speakiMusicState.savedBgmVolume;
                 localStorage.setItem('sr1_settings', JSON.stringify(s));
             }
+        }
+		const restoreVol = window.__speakiMusicState.savedBgmVolume;
+        if (restoreVol > 0) {
+            let tries = 0;
+            const timer = setInterval(() => {
+                tries++;
+                if (typeof window.updateGameSettings === "function") {
+                    clearInterval(timer);
+                    try { window.updateGameSettings({ bgmVolume: restoreVol }); } catch (_) {}
+                } else if (tries > 50) {
+                    clearInterval(timer);
+                }
+            }, 200);
         }
         localStorage.setItem("spkmod-is-bgm-suppressed", "false");
     }
