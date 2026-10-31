@@ -23896,7 +23896,8 @@ const spkmodGameGl = new WeakSet();
 
 function spkmodIsGameGl(gl) {
 	if (spkmodGameGl.has(gl)) return true;
-	if (gl.canvas && gl.canvas.classList && gl.canvas.classList.contains("sr-game-canvas")) {
+	const cl = gl.canvas && gl.canvas.classList;
+	if (cl && (cl.contains("sr-game-canvas") || cl.contains("canvas"))) {
 		spkmodGameGl.add(gl);
 		return true;
 	}
