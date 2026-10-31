@@ -4462,16 +4462,16 @@ function suppressGameBgm(mute) {
         if (state.isBgmSuppressed) return;
 
         // 1. Determine and save user's actual volume
-        let currentVol = getUserActualBgmVolume();
+        let currentVol = null;
         if (currentVol === null) {
-            if (typeof window.getGameSettings === "function") {
-                try {
-                    const s = window.getGameSettings();
-                    if (s && typeof s.bgmVolume === "number" && Number.isFinite(s.bgmVolume)) {
-                        currentVol = Math.max(0, Math.min(100, s.bgmVolume));
-                    }
-                } catch (_) {}
-            }
+			if (typeof window.getGameSettings === "function") {
+				try {
+					const s = window.getGameSettings();
+					if (s && typeof s.bgmVolume === "number" && Number.isFinite(s.bgmVolume)) {
+						currentVol = Math.max(0, Math.min(100, s.bgmVolume));
+					}
+				} catch (_) {}
+			}
             if (currentVol === null && slider && slider.value !== '') {
                 const n = Number(slider.value);
                 if (Number.isFinite(n)) currentVol = Math.max(0, Math.min(100, n));
@@ -4487,6 +4487,7 @@ function suppressGameBgm(mute) {
                     }
                 } catch (_) {}
             }
+			if (currentVol === null) currentVol = getUserActualBgmVolume();
             if (currentVol === null) currentVol = 70; // Native game default is 70
         }
 
