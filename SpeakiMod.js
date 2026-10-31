@@ -2475,6 +2475,21 @@ try {
 	}
 } catch (_) {}
 
+try {
+	if (localStorage.getItem("spkmod-is-bgm-suppressed") === "true") {
+		const saved = Number(localStorage.getItem("spkmod-user-bgm-volume"));
+		const raw = localStorage.getItem("sr1_settings");
+		if (raw && Number.isFinite(saved) && saved > 0 && saved <= 100) {
+			const p = JSON.parse(raw);
+			if (p && p.bgmVolume === 0) {
+				p.bgmVolume = saved;
+				localStorage.setItem("sr1_settings", JSON.stringify(p));
+			}
+		}
+		localStorage.setItem("spkmod-is-bgm-suppressed", "false");
+	}
+} catch (_) {}
+
 function isGameMuted() {
 	return lunIsMuted || isMutedByMinimize;
 }
@@ -4939,11 +4954,19 @@ function buildJukeboxUI() {
             state.isPlaying = false;
             state.player.pauseVideo();
             suppressGameBgm(false);
-        } else {
-            state.isChangingTrack = false;
-            suppressGameBgm(true);
-            state.player.playVideo();
-        }
+		} else {
+			state.isChangingTrack = false;
+			const tracks = getActiveJukeboxTracks();
+			const wantVid = tracks[state.currentTrackIndex]?.[0];
+			let loadedVid = null;
+			try { loadedVid = state.player.getVideoData()?.video_id; } catch (_) {}
+			if (wantVid && loadedVid !== wantVid) {
+				playTrackAtIndex(state.currentTrackIndex);
+			} else {
+				suppressGameBgm(true);
+				state.player.playVideo();
+			}
+		}
     });
 
     btnPrev.addEventListener('click', () => {
