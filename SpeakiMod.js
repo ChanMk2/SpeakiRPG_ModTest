@@ -7824,7 +7824,8 @@ document.body.appendChild(
 								const remoteContainers = gameState.remotePlayers?.remotePlayers ? 
 									Array.from(gameState.remotePlayers.remotePlayers.values()).map(rp => rp.container) : [];
 								gameState.playerContainer.children.forEach(c => {
-									if (!remoteContainers.includes(c)) c.visible = true;
+									if (remoteContainers.includes(c) || c === gameState.selfMinigameRing) return;
+									c.visible = true;
 								});
 							}
 							if (typeof gameState !== "undefined" && gameState?.cameraController) {
@@ -7929,7 +7930,8 @@ document.body.appendChild(
 								const remoteContainers = gameState.remotePlayers?.remotePlayers ? 
 									Array.from(gameState.remotePlayers.remotePlayers.values()).map(rp => rp.container) : [];
 								gameState.playerContainer.children.forEach(c => {
-									if (!remoteContainers.includes(c)) c.visible = true;
+									if (remoteContainers.includes(c) || c === gameState.selfMinigameRing) return;
+									c.visible = true;
 								});
 							}
 							if (gameState.playerContainer && gameState.cameraController) {
