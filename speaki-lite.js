@@ -67,8 +67,8 @@
 			settings: '⚙ SpeakiLite settings', close: 'Close', uiLang: 'Language', uiScale: 'UI size',
 			secDisplay: 'Display', fpsPing: 'Show FPS / ping', expTracker: 'EXP tracker',
 			expPerHour: 'Show per hour (off = per minute)', expWindow: 'Averaging window (min)', expReset: 'Reset EXP tracker',
-			secTranslate: 'Chat translation (on-device model)', trAuto: 'Auto-translate chat', trTarget: 'Translate into',
-			trHint: 'Even with auto-translate off, tapping a chat line translates just that line. A language model is downloaded once on first use.',
+			secTranslate: 'Chat translation (Google / MyMemory)', trAuto: 'Auto-translate chat', trTarget: 'Translate into',
+			trHint: 'Google Translate is used first. MyMemory is used automatically if Google fails. Chat messages are sent to online translation services.',
 			secBlock: 'Blocked users', blockHide: 'Hide blocked users\' characters & voices',
 			blockHint: 'Uses the block list from the game. Hides their character, emotes, voice, chat bubbles and hearts.',
 			secGraphics: 'Graphics', resolution: 'Resolution override', resolutionOff: 'Off',
@@ -77,8 +77,7 @@
 			secDiag: 'Diagnostics', glRefresh: 'Refresh',
 			expMin: '{0} EXP/min', expHour: '{0} EXP/hour', expMeasuring: 'Measuring EXP…',
 			nextMin: 'Lv.{0} · next in ~{1}m', nextHour: 'Lv.{0} · next in ~{1}h', nextNA: 'Lv.{0} · next -',
-			trDownloading: 'Downloading translation model… (first time only)', trReady: 'Translation model ready',
-			trNoBridge: 'On-device translation is not available in this app', trFail: 'Translation failed', trNothing: 'Nothing to translate',
+			trFail: 'Translation failed', trNothing: 'Nothing to translate',
 			glNone: '(no WebGL context yet)',
 			emojiTabStandard: "Standard",
 			emojiTabCustom: "MMO",
@@ -100,8 +99,8 @@
 			settings: '⚙ SpeakiLite 설정', close: '닫기', uiLang: '언어', uiScale: 'UI 크기',
 			secDisplay: '표시', fpsPing: 'FPS / 핑 표시', expTracker: '경험치 추적',
 			expPerHour: '시간당으로 표시 (끄면 분당)', expWindow: '평균 구간(분)', expReset: '경험치 추적 초기화',
-			secTranslate: '채팅 번역 (기기 내 모델)', trAuto: '채팅 자동 번역', trTarget: '번역할 언어',
-			trHint: '자동 번역이 꺼져 있어도 채팅 줄을 탭하면 그 줄만 번역됩니다. 처음 쓰는 언어는 모델을 한 번 내려받습니다.',
+			secTranslate: '채팅 번역 (Google / MyMemory)', trAuto: '채팅 자동 번역', trTarget: '번역할 언어',
+			trHint: 'Google 번역을 먼저 사용하며, 실패하면 MyMemory로 자동 전환합니다. 채팅 내용은 외부 번역 서비스로 전송됩니다.',
 			secBlock: '차단한 유저', blockHide: '차단한 유저의 캐릭터·보이스 숨기기',
 			blockHint: '게임의 차단 목록을 사용합니다. 캐릭터, 이모트, 보이스, 말풍선, 하트를 숨깁니다.',
 			secGraphics: '그래픽', resolution: '해상도 오버라이드', resolutionOff: '끔',
@@ -110,8 +109,7 @@
 			secDiag: '진단', glRefresh: '새로고침',
 			expMin: '{0} EXP/분', expHour: '{0} EXP/시간', expMeasuring: 'EXP 측정 중…',
 			nextMin: 'Lv.{0} · 다음까지 ~{1}분', nextHour: 'Lv.{0} · 다음까지 ~{1}시간', nextNA: 'Lv.{0} · 다음까지 -',
-			trDownloading: '번역 모델을 내려받는 중… (처음 한 번만)', trReady: '번역 모델 준비 완료',
-			trNoBridge: '이 앱에서는 기기 내 번역을 쓸 수 없습니다', trFail: '번역하지 못했습니다', trNothing: '번역할 내용이 없습니다',
+			trFail: '번역하지 못했습니다', trNothing: '번역할 내용이 없습니다',
 			glNone: '(아직 WebGL 컨텍스트 없음)',
 			emojiTabStandard: "기본",
 			emojiTabCustom: "MMO",
@@ -132,8 +130,8 @@
 			settings: '⚙ SpeakiLite 設定', close: '閉じる', uiLang: '言語', uiScale: 'UIサイズ',
 			secDisplay: '表示', fpsPing: 'FPS / Ping を表示', expTracker: '経験値トラッカー',
 			expPerHour: '1時間あたりで表示（オフで1分あたり）', expWindow: '平均する期間（分）', expReset: '経験値トラッカーをリセット',
-			secTranslate: 'チャット翻訳（端末内モデル）', trAuto: 'チャットを自動翻訳', trTarget: '翻訳先の言語',
-			trHint: '自動翻訳がオフでも、チャット行をタップするとその行だけ翻訳されます。初めて使う言語はモデルを一度ダウンロードします。',
+			secTranslate: 'チャット翻訳（Google / MyMemory）', trAuto: 'チャットを自動翻訳', trTarget: '翻訳先の言語',
+			trHint: 'Google 翻訳を優先し、失敗した場合は MyMemory に自動で切り替えます。チャット内容は外部の翻訳サービスに送信されます。',
 			secBlock: 'ブロックしたユーザー', blockHide: 'ブロックしたユーザーのキャラとボイスを隠す',
 			blockHint: 'ゲームのブロックリストを使用します。キャラ、エモート、ボイス、吹き出し、ハートを非表示にします。',
 			secGraphics: 'グラフィック', resolution: '解像度オーバーライド', resolutionOff: 'オフ',
@@ -142,8 +140,7 @@
 			secDiag: '診断', glRefresh: '更新',
 			expMin: '{0} EXP/分', expHour: '{0} EXP/時間', expMeasuring: 'EXP 計測中…',
 			nextMin: 'Lv.{0} · 次まで約{1}分', nextHour: 'Lv.{0} · 次まで約{1}時間', nextNA: 'Lv.{0} · 次まで -',
-			trDownloading: '翻訳モデルをダウンロード中…（初回のみ）', trReady: '翻訳モデルの準備ができました',
-			trNoBridge: 'このアプリでは端末内翻訳を利用できません', trFail: '翻訳に失敗しました', trNothing: '翻訳する内容がありません',
+			trFail: '翻訳に失敗しました', trNothing: '翻訳する内容がありません',
 			glNone: '（WebGL コンテキストはまだありません）',
 			emojiTabStandard: "標準",
 			emojiTabCustom: "MMO",
@@ -164,8 +161,8 @@
 			settings: '⚙ SpeakiLite 设置', close: '关闭', uiLang: '语言', uiScale: '界面大小',
 			secDisplay: '显示', fpsPing: '显示 FPS / 延迟', expTracker: '经验追踪',
 			expPerHour: '按小时显示（关闭则按分钟）', expWindow: '平均区间（分钟）', expReset: '重置经验追踪',
-			secTranslate: '聊天翻译（本机模型）', trAuto: '自动翻译聊天', trTarget: '翻译成',
-			trHint: '即使关闭自动翻译，点按聊天行也会只翻译那一行。首次使用某种语言时会下载一次模型。',
+			secTranslate: '聊天翻译（Google / MyMemory）', trAuto: '自动翻译聊天', trTarget: '翻译成',
+			trHint: '优先使用 Google 翻译；失败时自动切换到 MyMemory。聊天内容会发送到外部翻译服务。',
 			secBlock: '已屏蔽的用户', blockHide: '隐藏已屏蔽用户的角色和语音',
 			blockHint: '使用游戏内的屏蔽列表。会隐藏其角色、表情动作、语音、聊天气泡和爱心。',
 			secGraphics: '图形', resolution: '分辨率覆盖', resolutionOff: '关闭',
@@ -174,8 +171,7 @@
 			secDiag: '诊断', glRefresh: '刷新',
 			expMin: '{0} EXP/分钟', expHour: '{0} EXP/小时', expMeasuring: '正在测量 EXP…',
 			nextMin: 'Lv.{0} · 约{1}分钟后升级', nextHour: 'Lv.{0} · 约{1}小时后升级', nextNA: 'Lv.{0} · 升级 -',
-			trDownloading: '正在下载翻译模型…（仅首次）', trReady: '翻译模型已就绪',
-			trNoBridge: '此应用不支持本机翻译', trFail: '翻译失败', trNothing: '没有可翻译的内容',
+			trFail: '翻译失败', trNothing: '没有可翻译的内容',
 			glNone: '（尚无 WebGL 上下文）',
 			emojiTabStandard: "Standard",
 			emojiTabCustom: "MMO",
@@ -196,8 +192,8 @@
 			settings: '⚙ SpeakiLite 設定', close: '關閉', uiLang: '語言', uiScale: '介面大小',
 			secDisplay: '顯示', fpsPing: '顯示 FPS / 延遲', expTracker: '經驗追蹤',
 			expPerHour: '以小時顯示（關閉則以分鐘）', expWindow: '平均區間（分鐘）', expReset: '重設經驗追蹤',
-			secTranslate: '聊天翻譯（本機模型）', trAuto: '自動翻譯聊天', trTarget: '翻譯成',
-			trHint: '即使關閉自動翻譯，點按聊天行也會只翻譯那一行。首次使用某種語言時會下載一次模型。',
+			secTranslate: '聊天翻譯（Google / MyMemory）', trAuto: '自動翻譯聊天', trTarget: '翻譯成',
+			trHint: '優先使用 Google 翻譯；失敗時自動切換至 MyMemory。聊天內容會傳送至外部翻譯服務。',
 			secBlock: '已封鎖的使用者', blockHide: '隱藏已封鎖使用者的角色與語音',
 			blockHint: '使用遊戲內的封鎖清單。會隱藏其角色、表情動作、語音、聊天泡泡與愛心。',
 			secGraphics: '圖形', resolution: '解析度覆寫', resolutionOff: '關閉',
@@ -206,8 +202,7 @@
 			secDiag: '診斷', glRefresh: '重新整理',
 			expMin: '{0} EXP/分鐘', expHour: '{0} EXP/小時', expMeasuring: '正在測量 EXP…',
 			nextMin: 'Lv.{0} · 約{1}分鐘後升級', nextHour: 'Lv.{0} · 約{1}小時後升級', nextNA: 'Lv.{0} · 升級 -',
-			trDownloading: '正在下載翻譯模型…（僅首次）', trReady: '翻譯模型已就緒',
-			trNoBridge: '此應用程式不支援本機翻譯', trFail: '翻譯失敗', trNothing: '沒有可翻譯的內容',
+			trFail: '翻譯失敗', trNothing: '沒有可翻譯的內容',
 			glNone: '（尚無 WebGL 內容）',
 			emojiTabStandard: "Standard",
 			emojiTabCustom: "MMO",
@@ -228,8 +223,8 @@
 			settings: '⚙ Ajustes de SpeakiLite', close: 'Cerrar', uiLang: 'Idioma', uiScale: 'Tamaño de la interfaz',
 			secDisplay: 'Pantalla', fpsPing: 'Mostrar FPS / ping', expTracker: 'Seguimiento de EXP',
 			expPerHour: 'Mostrar por hora (apagado = por minuto)', expWindow: 'Ventana de promedio (min)', expReset: 'Reiniciar seguimiento de EXP',
-			secTranslate: 'Traducción del chat (modelo en el dispositivo)', trAuto: 'Traducir el chat automáticamente', trTarget: 'Traducir a',
-			trHint: 'Aunque la traducción automática esté apagada, al tocar una línea del chat se traduce solo esa línea. El modelo de idioma se descarga una vez la primera vez.',
+			secTranslate: 'Traducción del chat (Google / MyMemory)', trAuto: 'Traducir el chat automáticamente', trTarget: 'Traducir a',
+			trHint: 'Primero se utiliza Google Translate. Si falla, se cambia automáticamente a MyMemory. Los mensajes se envían a servicios de traducción externos.',
 			secBlock: 'Usuarios bloqueados', blockHide: 'Ocultar personajes y voces de usuarios bloqueados',
 			blockHint: 'Usa la lista de bloqueo del juego. Oculta su personaje, emotes, voz, burbujas de chat y corazones.',
 			secGraphics: 'Gráficos', resolution: 'Forzar resolución', resolutionOff: 'No',
@@ -238,8 +233,7 @@
 			secDiag: 'Diagnóstico', glRefresh: 'Actualizar',
 			expMin: '{0} EXP/min', expHour: '{0} EXP/hora', expMeasuring: 'Midiendo EXP…',
 			nextMin: 'Nv.{0} · siguiente en ~{1} min', nextHour: 'Nv.{0} · siguiente en ~{1} h', nextNA: 'Nv.{0} · siguiente -',
-			trDownloading: 'Descargando modelo de traducción… (solo la primera vez)', trReady: 'Modelo de traducción listo',
-			trNoBridge: 'La traducción en el dispositivo no está disponible en esta app', trFail: 'Error de traducción', trNothing: 'Nada que traducir',
+			trFail: 'Error de traducción', trNothing: 'Nada que traducir',
 			glNone: '(aún no hay contexto WebGL)',
 			emojiTabStandard: "Standard",
 			emojiTabCustom: "MMO",
@@ -1071,42 +1065,6 @@
 	}
 
 	// ------------------------------------------------------------------
-	// Native bridge for the on-device translation model
-	// ------------------------------------------------------------------
-	const bridge = { pending: new Map(), seq: 0, wired: false };
-
-	function getNative() {
-		const n = window.SpeakiLocalAI;
-		if (n && !bridge.wired) {
-			bridge.wired = true;
-			n.onmessage = ev => {
-				let m; try { m = JSON.parse(ev.data); } catch (_) { return; }
-				const p = bridge.pending.get(m.id);
-				if (!p) return;
-				if (m.progress) { p.arm(180000); if (p.onProgress) p.onProgress(m); return; }
-				bridge.pending.delete(m.id);
-				clearTimeout(p.timer);
-				p.resolve(m);
-			};
-		}
-		return n || null;
-	}
-
-	function nativeCall(payload, onProgress, timeoutMs = 20000) {
-		return new Promise(resolve => {
-			const n = getNative();
-			if (!n) return resolve({ ok: false, error: 'no_bridge' });
-			const id = String(++bridge.seq);
-			const p = { resolve, onProgress, timer: 0 };
-			p.arm = ms => { clearTimeout(p.timer); p.timer = setTimeout(() => { bridge.pending.delete(id); resolve({ ok: false, error: 'timeout' }); }, ms); };
-			p.arm(timeoutMs);
-			bridge.pending.set(id, p);
-			try { n.postMessage(JSON.stringify(Object.assign({ id }, payload))); }
-			catch (e) { bridge.pending.delete(id); clearTimeout(p.timer); resolve({ ok: false, error: String(e) }); }
-		});
-	}
-
-	// ------------------------------------------------------------------
 	// Chat translation
 	// ------------------------------------------------------------------
 	// Translation cache: copied from the original mod (priority/LRU min-heap, 1500 entries, key "source|target:normalized text")
@@ -1259,57 +1217,320 @@
 	    lunTranslateHeapNodeByKey.set(key, node);
 	    cacheHeapInsert(node);
 	}
-
-	const tr = { chain: Promise.resolve(), backlog: 0, warnedNoBridge: false };
+	
+	const tr = {
+		chain: Promise.resolve(),
+		backlog: 0,
+		lastAt: 0
+	};
 	const TR_BACKLOG_MAX = 30;
+	const TR_MIN_GAP_MS = 400;
 
+	// --------------------------------------------------
+	// Translation source language detection
+	// Same detection rules as the original mod
+	// --------------------------------------------------
 	function guessSource(text) {
-		if (/[\u3040-\u30FF]/.test(text)) return 'ja';     // kana wins over han
-		if (/[\uAC00-\uD7A3]/.test(text)) return 'ko';
-		if (/[\u4E00-\u9FFF]/.test(text)) return 'zh-CN';
-		if (/[\u0400-\u04FF]/.test(text)) return 'ru';
-		return null; // let the native language-id decide
+    	if (/[\uAC00-\uD7A3]/.test(text)) return 'ko';
+    	if (/[\u3040-\u30FF]/.test(text)) return 'ja';
+    	if (/[\u4E00-\u9FFF]/.test(text)) return 'zh-CN';
+    	if (/[\u0400-\u04FF]/.test(text)) return 'ru';
+    	if (/[äöüßÄÖÜ]/.test(text)) return 'de';
+    	if (/[ñ¿¡Ñ]/.test(text)) return 'es';
+    	if (/[ãõÃÕ]/.test(text)) return 'pt';
+    	if (/[œæçàâêîôûèéŒÆÇÀÂÊÎÔÛÈÉ]/.test(text)) return 'fr';
+
+    	return 'en';
 	}
 
-	// Same flow as translateChatText() in the original mod, with the on-device model instead of the web APIs.
-	// Resolves to the translated string, null (nothing to show) or { error } (not cached).
-	async function translateChatText(text, source, target) {
-		if (!text || !text.trim() || source === target) return null;
-		if (text.length > lunTranslateMaxLen) text = text.slice(0, lunTranslateMaxLen);
+	// --------------------------------------------------
+	// Translation result cleanup
+	// Based on cleanTranslatedText() in the original mod
+	// --------------------------------------------------
+	function cleanTranslatedText(text) {
+    	if (!text || typeof text !== 'string') return '';
 
-		// Strip all :emoji_name: patterns completely from translation input
-		const safeText = text.replace(/:[a-zA-Z0-9_]+:/g, '').trim().replace(/\s+/g, ' ');
-
-		// If the message was entirely composed of emojis (or left empty), don't translate it
-		if (!safeText) return null;
-
-		const normalized = safeText.toLowerCase();
-		const cacheKey = `${source || 'auto'}|${target}:${normalized}`;
-		const cached = cacheGet(cacheKey);
-		if (cached !== undefined) return cached;
-		if (tr.backlog >= TR_BACKLOG_MAX) return null;
-
-		tr.backlog++;
-		const run = tr.chain.then(async () => {
-			const res = await nativeCall({ op: 'translate', text: safeText, source, target }, m => {
-				if (m.state === 'downloading') toast(T('trDownloading'), 4000);
-			});
-			if (res.ok && res.downloaded) toast(T('trReady'), 1500);
-			if (!res.ok) {
-				if (res.error === 'no_bridge' && !tr.warnedNoBridge) { tr.warnedNoBridge = true; toast(T('trNoBridge')); }
-				return { error: res.error };
+    	let cleaned = text;
+    	cleaned = cleaned.replace(/&lt;\/?[a-zA-Z0-9_\-:]+(?:\s+[^&>]*?)?&gt;/gi, '');
+		cleaned = cleaned.replace(/<\/?[a-zA-Z0-9_\-:]+(?:\s+[^>]*?)?>/gi, '');
+		
+		try {
+			const doc = new DOMParser().parseFromString(cleaned, 'text/html');
+			
+			if (doc && doc.body) {
+				cleaned = doc.body.textContent || cleaned;
 			}
-			const translated = res.text && res.text.trim() ? res.text.trim() : null;
-			if (!translated) return null;
+    	} catch (_) {
+        	cleaned = cleaned
+            	.replace(/&amp;/g, '&')
+            	.replace(/&lt;/g, '<')
+            	.replace(/&gt;/g, '>')
+            	.replace(/&quot;/g, '"')
+            	.replace(/&#39;/g, "'")
+            	.replace(/&apos;/g, "'")
+            	.replace(/&#(\d+);/g, (_, dec) =>
+                	String.fromCharCode(Number(dec))
+            	)
+            	.replace(/&#x([0-9a-fA-F]+);/g, (_, hex) =>
+                	String.fromCharCode(parseInt(hex, 16))
+            	);
+		}
 
-			// Check against the stripped text, so it doesn't just re-translate identical text
-			if (translated.toLowerCase() === safeText.toLowerCase()) return null;
+    	cleaned = cleaned.replace(/<\/?[a-zA-Z0-9_\-:]+(?:\s+[^>]*?)?>/gi, '');
+		cleaned = cleaned.replace(/<[^>]*>/g, '');
+		
+		if (/^(\[.*?\]\s*)?\//.test(cleaned)) {
+        	cleaned = cleaned.replace(/\([a-z0-9\-,\s]+\)\s*/gi, '');
+        	cleaned = cleaned.replace(/^\//, '');
+        	cleaned = cleaned.replace(/^(\[.*?\]\s*)\//, '$1');
+        	cleaned = cleaned.replace(/\/$/, '');
+        	cleaned = cleaned.replace(/\//g, ', ');
+    	}
 
-			cacheSet(cacheKey, translated);
-			return translated;
-		}).finally(() => { tr.backlog--; });
-		tr.chain = run.catch(() => { /* keep the chain alive */ });
-		return run;
+    	return cleaned.trim();
+	}
+
+	// --------------------------------------------------
+	// Daily API quota tracking
+	// --------------------------------------------------
+	function translationQuotaHit(provider) {
+    	const key = provider === 'google' ? 'tr-google-quota' : 'tr-mymemory-quota';
+		return LS.get(key, '') === new Date().toDateString();
+	}
+
+	function markTranslationQuota(provider) {
+    	const key = provider === 'google' ? 'tr-google-quota' : 'tr-mymemory-quota';
+		LS.set(key, new Date().toDateString());
+	}
+
+	// --------------------------------------------------
+	// Google Translate API
+	// --------------------------------------------------
+	async function callGoogleTranslate(text, target) {
+    	try {
+        	const gtTarget = target === 'es-419' ? 'es' : target;
+
+        	const url =
+            	`https://translate.googleapis.com/translate_a/single` +
+            	`?client=gtx&sl=auto` +
+            	`&tl=${encodeURIComponent(gtTarget)}` +
+            	`&dt=t&q=${encodeURIComponent(text)}`;
+
+        	const res = await fetch(url, {
+            	method: 'GET',
+            	cache: 'no-store'
+        	});
+
+        	if (!res.ok) {
+            	if (res.status === 429) {
+                	markTranslationQuota('google');
+                	console.warn('[SpeakiLite] Google quota reached.');
+            	}
+
+            	return {
+                	text: null,
+                	status: res.status
+            	};
+        	}
+
+        	const data = await res.json();
+
+        	if (!data || !Array.isArray(data[0])) {
+            	return {
+                	text: null,
+                	status: 200
+            	};
+        	}
+			
+			let translated = '';
+
+        	for (const part of data[0]) {
+            	if (part && part[0]) {
+                	translated += part[0];
+            	}
+        	}
+
+        	translated = cleanTranslatedText(translated);
+
+        	return {
+            	text: translated || null,
+            	status: 200
+        	};
+
+    	} catch (e) {
+        	console.warn('[SpeakiLite] Google translation error:', e);
+
+        	return {
+            	text: null,
+            	status: 0
+        	};
+    	}
+	}
+
+	// --------------------------------------------------
+	// MyMemory Translate API
+	// --------------------------------------------------
+	async function callMyMemoryTranslate(text, source, target) {
+    	try {
+        	const params = new URLSearchParams({
+            	q: text,
+            	langpair: `${source}|${target}`
+        	});
+
+        	const url = `https://api.mymemory.translated.net/get?${params}`;
+
+        	const res = await fetch(url, {
+            	method: 'GET',
+            	cache: 'no-store'
+        	});
+
+        	if (!res.ok) {
+            	if (res.status === 403 || res.status === 429) {
+                	markTranslationQuota('mymemory');
+                	console.warn('[SpeakiLite] MyMemory quota reached.');
+            	}
+
+            	return {
+                	text: null,
+                	status: res.status
+            	};
+        	}
+
+        	const data = await res.json();
+        	const apiStatus = Number(data?.responseStatus);
+
+        	if (apiStatus === 403 || apiStatus === 429) {
+            	markTranslationQuota('mymemory');
+        	}
+
+        	const translated = cleanTranslatedText(
+            	data?.responseData?.translatedText
+        	);
+
+        	if (!translated || apiStatus !== 200) {
+            	return {
+                	text: null,
+                	status: apiStatus || res.status
+            	};
+        	}
+
+        	return {
+            	text: translated,
+            	status: 200
+        	};
+
+    	} catch (e) {
+        	console.warn('[SpeakiLite] MyMemory translation error:', e);
+
+        	return {
+            	text: null,
+            	status: 0
+        	};
+    	}
+	}
+
+	// --------------------------------------------------
+	// Main translation function
+	// Google first -> MyMemory fallback
+	// --------------------------------------------------
+	async function translateChatText(text, source, target) {
+    	const sourceLang = source || 'en';
+
+    	if (!text || !text.trim() || sourceLang === target) {
+        	return null;
+    	}
+
+    	if (text.length > lunTranslateMaxLen) {
+        	text = text.slice(0, lunTranslateMaxLen);
+    	}
+
+    	// Remove custom emoji codes before translation
+    	const safeText = text.replace(/:[a-zA-Z0-9_]+:/g, '').trim().replace(/\s+/g, ' ');
+
+    	if (!safeText) return null;
+
+    	const normalized = safeText.toLowerCase();
+    	const cacheKey = `${sourceLang}|${target}:${normalized}`;
+
+    	// 1. Check translation cache
+    	const cached = cacheGet(cacheKey);
+
+    	if (cached !== undefined) {
+        	return cached;
+    	}
+
+    	// 2. Limit pending translation requests
+    	if (tr.backlog >= TR_BACKLOG_MAX) {
+        	return null;
+    	}
+
+    	tr.backlog++;
+
+    	// 3. Serialize translation requests
+    	const run = tr.chain.then(async () => {
+			// Keep at least 400 ms between translation jobs
+        	const wait = tr.lastAt + TR_MIN_GAP_MS - Date.now();
+
+        	if (wait > 0) {
+            	await new Promise(resolve => setTimeout(resolve, wait));
+        	}
+
+        	tr.lastAt = Date.now();
+
+        	try {
+            	let translated = null;
+
+            	// 4. Primary: Google Translate
+            	if (!translationQuotaHit('google')) {
+                	const googleResult = await callGoogleTranslate(safeText, target);
+					
+					if (googleResult.text) {
+						translated = googleResult.text;
+					}
+				}
+
+            	// 5. Fallback: MyMemory
+            	if (!translated && !translationQuotaHit('mymemory')) {
+                	const myMemoryResult = await callMyMemoryTranslate(safeText, sourceLang, target);
+					
+					if (myMemoryResult.text) {
+						translated = myMemoryResult.text;
+					}
+				}
+
+            	// 6. Both APIs failed
+            	if (!translated) {
+                	return {
+                    	error: 'translate_failed'
+                	};
+            	}
+
+            	// Do not show unchanged translations
+            	if (translated.trim().toLowerCase() === normalized) {
+                	return null;
+            	}
+
+            	// 7. Save successful translation to cache
+            	cacheSet(cacheKey, translated);
+
+            	return translated;
+
+        	} catch (e) {
+            	console.warn('[SpeakiLite] Translation failed:', e);
+
+            	return {
+                	error: 'translate_failed'
+            	};
+        	}
+
+    	}).finally(() => {
+        	tr.backlog--;
+    	});
+
+    	// Keep queue alive even if one request fails
+    	tr.chain = run.catch(() => {});
+
+    	return run;
 	}
 
 	function translateText(text) {
@@ -1320,7 +1541,7 @@
 		const res = await translateText(msg);
 		const gs = window.gameState;
 		if (res && typeof res === 'object' && res.error) {
-			if (force) toast(T(res.error === 'no_bridge' ? 'trNoBridge' : 'trFail'));
+			if (force) toast(T('trFail'));
 			return;
 		}
 		if (!res) { if (force) toast(T('trNothing')); return; }
@@ -2012,7 +2233,7 @@
 			glDiagnostics(),
 			`emoji: ${counts}${emoji.lastError ? ' | err: ' + emoji.lastError : ''} | button: ${document.getElementById('spkmod-emoji-btn') ? 'yes' : 'no'} | input: ${findChatInput() ? 'yes' : 'no'}`,
 			`block: ${blk.names.size + blk.local.size} | token: ${getAuthHeader() ? 'yes' : 'no'} | loaded: ${blk.loaded}`,
-			`injector: v${window.speakiInjectorVer || '-'} | native bridge: ${window.SpeakiLocalAI ? 'yes' : 'no'}`,
+			`injector: v${window.speakiInjectorVer || '-'}`,
 		].join('\n');
 	}
 
@@ -2148,7 +2369,7 @@
 				h('button', { type: 'button', class: 'spkl-btn', onclick: () => { resetExp(); updateHud(); } }, T('expReset')),
 
 				h('h4', null, T('secTranslate')),
-				check(T('trAuto'), cfg.translate, v => { cfg.translate = v; LS.set('tr', v ? 1 : 0); if (v) toast(T('trDownloading'), 2600); }),
+				check(T('trAuto'), cfg.translate, v => { cfg.translate = v; LS.set('tr', v ? 1 : 0); }),
 				select(T('trTarget'), TRANSLATE_TARGETS, cfg.trTarget, v => { cfg.trTarget = v; LS.set('tr-target', v); }),
 				h('p', { class: 'spkl-hint' }, T('trHint')),
 
