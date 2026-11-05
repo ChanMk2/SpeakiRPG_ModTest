@@ -379,8 +379,8 @@
 			try {
 				const a0 = args[0];
 				const url = typeof a0 === 'string' ? a0 : (a0 && a0.url) || '';
-				const m = /^https:\/\/(sr1|relay)\.overture\.io\.kr\/api\//.exec(url);
-				if (m) pingOrigin = `https://${m[1]}.overture.io.kr`;
+				if (url.includes('relay.overture.io.kr/api/')) pingOrigin = 'https://relay.overture.io.kr';
+				else if (url.includes('sr1.overture.io.kr/api/')) pingOrigin = 'https://sr1.overture.io.kr';
 				blockSniffRequest(args, url);
 				p = origFetch.apply(this, args);
 				if (url.includes('/api/block')) blockSniffResponse(args, url, p);
@@ -1411,7 +1411,7 @@
 	// FPS = frames in which the game actually drew (original mod's approach). spkmodIsGameGl() includes the
 	// change from DJTOMATO/SpeakiRPG PR #61: a renderer re-created by the game gets the "canvas" class.
 	const fps = { value: 0, running: false };
-	const ping = { value: null, last: 0, inflight: false, backoff: 0 };
+	const ping = { value: null, last: performance.now() + 3000, inflight: false, backoff: 0 };
 	const spkmodFpsState = { enabled: false, drawn: false, frames: 0 };
 	let lunFpsLastRenderedFrames = 0;
 	let lunLastFrameTime = performance.now();
@@ -1494,24 +1494,42 @@
 			requestAnimationFrame(fpsLoop);
 		}
 	}
-
-	// no-cors GET: the response is opaque (so no CORS headers needed), but its timing is still the RTT.
+	
 	async function pingTick() {
 		const now = performance.now();
+		
 		if (ping.inflight || now < ping.backoff || document.hidden || now - ping.last < 5000) return;
+		
 		ping.inflight = true;
+		
 		const ctl = typeof AbortController !== 'undefined' ? new AbortController() : null;
-		const timer = ctl ? setTimeout(() => ctl.abort(), 4000) : 0;
+		const timer = ctl ? setTimeout(() => ctl.abort(), 3000) : null;
 		const t0 = performance.now();
+		
 		try {
-			await fetch(`${pingOrigin}/health/live`, { method: 'GET', mode: 'no-cors', cache: 'no-store', signal: ctl ? ctl.signal : undefined });
-			const ms = performance.now() - t0;
-			ping.value = ping.value === null ? Math.round(ms) : Math.round(ms * 0.6 + ping.value * 0.4);
-			ping.last = performance.now();
+			const res = await fetch(`${pingOrigin}/health/live`, {
+				method: 'GET',
+				cache: 'no-store',
+				signal: ctl ? ctl.signal : undefined
+			});
+			
+			if (res.ok || res.status === 204 || res.status === 401) {
+				const ms = performance.now() - t0;
+				
+				if (typeof ms === 'number' && Number.isFinite(ms) && ms > 0) {
+					const rounded = Math.round(ms);					
+					ping.value = ping.value === null ? rounded : Math.round(rounded * 0.6 + ping.value * 0.4);
+					ping.last = performance.now();
+					// Immediately refresh the mobile HUD.
+					updateHud();
+				}
+			} else if (res.status >= 500) {
+				ping.backoff = performance.now() + 10000;
+			}
 		} catch (_) {
 			ping.backoff = performance.now() + 5000;
 		} finally {
-			clearTimeout(timer);
+			if (timer !== null) clearTimeout(timer);
 			ping.inflight = false;
 		}
 	}
@@ -1545,14 +1563,18 @@
 		expState.remaining = null;
 		expState.ready = false;
 	}
-
+	
 	function expPoll() {
+		if (window.__spkmodPauseTick) return;
+		
 		const gs = window.gameState;
 		const st = gs && gs.myStat;
-		if (!st || typeof st.exp !== 'number' || isNaN(st.exp)) return;
-
-		const name = st.name || gs.myPlayerName || null;
+		const name = (gs && (gs.myPlayerName || (st && st.name))) || '';
+		
+		if (!gs || !st || !name) return;
+		if (typeof st.exp !== 'number' || isNaN(st.exp)) return;
 		if (expState.name !== null && name !== expState.name) resetExp();
+		
 		expState.name = name;
 
 		const playerExp = st.exp;
@@ -1619,10 +1641,11 @@
 
 		// SpeakiLite HUD connection
 		expState.rate = lunExpTrackerSpeed;
-		expState.level = typeof level === 'number' ? level : null;
+		expState.level = level == null ? null : level;
 
 		expState.remaining = lunExpTrackerSpeed > 0 ? (maxExp - playerExp) / lunExpTrackerSpeed : null;
 		expState.ready = lunExpTrackerInitialized;
+		updateHud();
 	}
 
 	function fmtNum(n) {
@@ -1648,10 +1671,24 @@
 			blk.local = new Set(Array.isArray(stored) ? stored.map(normName).filter(Boolean) : []);
 		} catch (_) { blk.local = new Set(); }
 	}
-
+	
 	function isBlockedUser(name) {
 		const c = normName(name);
-		return !!c && (blk.names.has(c) || blk.local.has(c));
+		
+		if (!c) return false;
+		
+		if (blk.names.has(c) || blk.local.has(c)) return true;
+		
+		try {
+			const stored = JSON.parse(localStorage.getItem('sr1_blocked_players') || '[]');
+			
+			if (Array.isArray(stored) && stored.some(n => typeof n === 'string' && normName(n) === c)) {
+				blk.local.add(c);
+				return true;
+			}
+		} catch (_) {}
+		
+		return false;
 	}
 
 	function authFromArgs(args) {
@@ -1705,6 +1742,67 @@
 		}).catch(() => { /* never disturb the game's own request */ });
 	}
 
+	// ------------------------------------------------------------------
+	// XMLHttpRequest block-list hooks — ported from SpeakiMod+
+	// ------------------------------------------------------------------
+	(function installBlockXhrHooks() {
+    	const proto = window.XMLHttpRequest && window.XMLHttpRequest.prototype;
+
+    	if (!proto || proto.__spklBlockXhrHooked) return;
+
+    	proto.__spklBlockXhrHooked = true;
+
+    	const originalOpen = proto.open;
+
+    	proto.open = function(method, url) {
+			this.__spklBlockUrl = String(url || '');
+			this.__spklBlockMethod = String(method || 'GET').toUpperCase();
+			return originalOpen.apply(this, arguments);
+		};
+		
+		const originalSetRequestHeader = proto.setRequestHeader;
+		
+		proto.setRequestHeader = function(header, value) {
+			const auth = String(value || '');			
+			if (String(header).toLowerCase() === 'authorization' && /^Bearer /i.test(auth) && auth !== blk.token) {
+				blk.token = auth;
+				blk.nextFetchAt = 0;
+				setTimeout(() => {
+					fetchBlocklist();
+				}, 100);
+			}
+			return originalSetRequestHeader.apply(this, arguments);
+		};
+		
+		const originalSend = proto.send;
+		
+		proto.send = function() {
+			this.addEventListener('load', function() {
+				const url = this.__spklBlockUrl || '';
+				if (!url.includes('/api/block')) return;
+				try {
+					const data = JSON.parse(this.responseText);
+					if (data && (Array.isArray(data.blocks) || typeof data.nickname === 'string')) {
+						applyBlockData(data);
+					}
+				} catch (_) {
+					// Ignore non-JSON responses.
+				}				
+				if (this.__spklBlockMethod === 'DELETE') {
+					const blockId = url.split('?')[0].split('/').pop();
+					const blockedName = blk.ids.get(blockId);
+					if (blockedName) {
+						blk.names.delete(blockedName);
+						blk.ids.delete(blockId);
+					}
+					updateBlockedVisibility();
+					setTimeout(fetchBlocklist, 1500);
+				}
+			}, { once: true });
+			return originalSend.apply(this, arguments);
+		};
+	})();
+
 	function getAuthHeader() {
 		try {
 			if (typeof window.getNativeAuthToken === 'function') {
@@ -1724,9 +1822,10 @@
 			if (res.ok) applyBlockData(await res.json());
 		} catch (_) { blk.nextFetchAt = Date.now() + 10000; }
 	}
-
+	
 	function remotePlayerMap() {
-		const rp = window.gameState && window.gameState.remotePlayers;
+		const rp = window.gameState && window.gameState.remotePlayers;		
+		if (rp && typeof rp.forEach === 'function') return rp;
 		const m = rp && rp.remotePlayers;
 		return m && typeof m.forEach === 'function' ? m : null;
 	}
@@ -1753,15 +1852,37 @@
 		if (!blk.anyHid && (!blk.enabled || (blk.names.size === 0 && blk.local.size === 0))) return;
 		updateBlockedVisibility();
 	}
-
+	
 	function findRemotePlayer(playerId) {
-		const m = remotePlayerMap();
-		if (!m) return null;
-		let p = typeof m.get === 'function' ? (m.get(playerId) || m.get(Number(playerId)) || m.get(String(playerId))) : null;
-		if (p) return p;
-		let found = null;
-		m.forEach(item => { if (!found && item && item.info && item.info.playerId == playerId) found = item; });
-		return found;
+		const rp = window.gameState && window.gameState.remotePlayers;
+		
+		if (!rp) return null;
+		
+		const sources = [rp, rp.remotePlayers];
+		const keys = [
+			playerId,
+			Number(playerId),
+			String(playerId)
+		];
+		
+		for (const source of sources) {
+			if (!source || typeof source.get !== 'function') continue;
+			
+			for (const key of keys) {
+				const player = source.get(key);
+				if (player) return player;
+			}
+		}
+		
+		for (const source of sources) {
+			if (!source || typeof source.values !== 'function') continue;
+			
+			for (const player of source.values()) {
+				if (player && player.info && player.info.playerId == playerId) return player;
+			}
+		}
+		
+		return null;
 	}
 
 	const playerBlocked = pl => !!(blk.enabled && pl && isBlockedUser((pl.info && pl.info.name) || pl.name));
@@ -1921,6 +2042,7 @@
 		if (cfg.fpsPing) hud.l1.textContent = `${fps.value} FPS | ${ping.value === null ? '--' : ping.value}ms`;
 
 		const hasExp = cfg.exp && expState.level !== null;
+		const levelLabel = expState.level == null ? '?' : expState.level;
 		hud.l2.style.display = hud.l3.style.display = hasExp ? '' : 'none';
 		if (!hasExp) return;
 		if (!expState.ready) {
@@ -1931,9 +2053,9 @@
 		const rate = cfg.expPerHour ? expState.rate * 3600 : expState.rate * 60;
 		hud.l2.textContent = T(cfg.expPerHour ? 'expHour' : 'expMin', fmtNum(rate));
 		const rem = expState.remaining;
-		if (rem === null || !isFinite(rem) || rem < 0) hud.l3.textContent = T('nextNA', expState.level);
-		else if (rem >= 3600) hud.l3.textContent = T('nextHour', expState.level, (rem / 3600).toFixed(1));
-		else hud.l3.textContent = T('nextMin', expState.level, Math.max(1, Math.round(rem / 60)));
+		if (rem === null || !isFinite(rem)) hud.l3.textContent = T('nextNA', levelLabel);
+		else if (rem > 3600) hud.l3.textContent = T('nextHour', levelLabel, (rem / 3600).toFixed(1));
+		else hud.l3.textContent = T('nextMin', levelLabel, Math.round(rem / 60));
 	}
 
 	// ------------------------------------------------------------------
