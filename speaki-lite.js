@@ -1829,22 +1829,23 @@
 		const m = rp && rp.remotePlayers;
 		return m && typeof m.forEach === 'function' ? m : null;
 	}
-
+	
 	function updateBlockedVisibility() {
-		if (!blk.enabled && !blk.anyHid) return;
 		const m = remotePlayerMap();
 		if (!m) return;
+		
 		let hid = false;
+		
 		m.forEach(pl => {
 			const c = pl && pl.container;
 			if (!c) return;
-			if (blk.enabled && isBlockedUser(pl.info && pl.info.name)) {
-				if (c.visible !== false) c.visible = false;
-				pl.__spklHid = true; hid = true;
-			} else if (pl.__spklHid) { // only undo what we did
-				c.visible = true; pl.__spklHid = false;
-			}
+			
+			const blocked = blk.enabled && isBlockedUser(pl.info && pl.info.name);
+			c.visible = !blocked;
+			
+			if (blocked) hid = true;
 		});
+		
 		blk.anyHid = hid;
 	}
 
