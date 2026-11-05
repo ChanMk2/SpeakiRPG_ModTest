@@ -1593,7 +1593,7 @@
 		if (body.dataset.spkl) return;
 		body.dataset.spkl = '1';
 		const info = lineInfo(body);
-		if (String(info.name).startsWith('↳')) body.classList.add('spkl-translated'); // our own translation lines: yellow
+		if (String(info.name).startsWith('↳') && body.closest('.sr-chatbox__log')) body.classList.add('spkl-translated');
 		renderEmojiIn(body);
 		if (!body.closest('.sr-chatbox__log')) return; // the preview line is not interactive
 		body.addEventListener('click', ev => {
