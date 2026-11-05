@@ -48,7 +48,7 @@ window.injectSpeakiMod = () => {
 
 			document.head.appendChild(inj);
 		} catch (e) {
-			console.error("[SpeakiMod] Failed to inject SpeakiMod.js:", e);
+			console.error("[SpeakiLite] Failed to inject speaki-lite.js:", e);
 		}
 	}, 100);
 };
