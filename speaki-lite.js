@@ -1659,7 +1659,7 @@
 	// Blocked users: hide character, emotes, voice, chat bubbles and hearts
 	// (port of the desktop mod's behaviour; the list comes from the game's own /api/block)
 	// ------------------------------------------------------------------
-	const blk = { names: new Set(), ids: new Map(), local: new Set(), localAt: 0, token: '', loaded: false, nextFetchAt: 0, anyHid: false, enabled: LS.get('block', '1') === '1' };
+	const blk = { names: new Set(), ids: new Map(), local: new Set(), localAt: 0, token: '', loaded: false, anyHid: false, enabled: LS.get('block', '1') === '1' };
 	const normName = n => (typeof n === 'string' ? n.trim().toLocaleLowerCase() : '');
 
 	function refreshLocalBlocked() {
@@ -1701,10 +1701,13 @@
 			return hd.Authorization || hd.authorization || '';
 		} catch (_) { return ''; }
 	}
-
+	
 	function blockSniffRequest(args) {
 		const auth = authFromArgs(args);
-		if (auth && /^bearer /i.test(auth) && auth !== blk.token) { blk.token = auth; blk.nextFetchAt = 0; }
+		if (auth && /^bearer /i.test(auth) && auth !== blk.token) {
+			blk.token = auth;
+			setTimeout(fetchBlocklist, 100);
+		}
 	}
 
 	function applyBlockData(data) {
@@ -1723,23 +1726,34 @@
 		}
 		updateBlockedVisibility();
 	}
-
+	
 	function blockSniffResponse(args, url, promise) {
 		let method = 'GET';
+		
 		try {
 			if (args[1] && args[1].method) method = args[1].method;
 			else if (args[0] && args[0].method) method = args[0].method;
-		} catch (_) { /* ignore */ }
+		} catch (_) {}
+		
 		method = String(method).toUpperCase();
+		
 		promise.then(res => {
+			res.clone().json()
+				.then(applyBlockData)
+            	.catch(() => {});
+				
 			if (method === 'DELETE') {
-				const bId = url.split('?')[0].split('/').pop();
-				if (blk.ids.has(bId)) { blk.names.delete(blk.ids.get(bId)); blk.ids.delete(bId); updateBlockedVisibility(); }
-				blk.nextFetchAt = Date.now() + 1500; // re-sync shortly after
-				return null;
+            	const bId = url.split('?')[0].split('/').pop();
+				
+				if (blk.ids.has(bId)) {
+					blk.names.delete(blk.ids.get(bId));
+					blk.ids.delete(bId);
+					updateBlockedVisibility();
+				}
+				
+				setTimeout(fetchBlocklist, 1500);
 			}
-			return res.clone().json().then(applyBlockData);
-		}).catch(() => { /* never disturb the game's own request */ });
+		}).catch(() => {});
 	}
 
 	// ------------------------------------------------------------------
@@ -1766,7 +1780,6 @@
 			const auth = String(value || '');			
 			if (String(header).toLowerCase() === 'authorization' && /^Bearer /i.test(auth) && auth !== blk.token) {
 				blk.token = auth;
-				blk.nextFetchAt = 0;
 				setTimeout(() => {
 					fetchBlocklist();
 				}, 100);
@@ -1812,15 +1825,24 @@
 		} catch (_) { /* ignore */ }
 		return blk.token;
 	}
-
+	
 	async function fetchBlocklist() {
 		const auth = getAuthHeader();
-		if (!auth) return;
-		blk.nextFetchAt = Date.now() + 120000; // periodic re-sync
+		
+		if (!auth) {
+			setTimeout(fetchBlocklist, 1000);
+			return;
+		}
+		
 		try {
-			const res = await window.fetch(`${pingOrigin}/api/block`, { method: 'GET', cache: 'no-store', headers: { Authorization: auth } });
+			const res = await window.fetch(`${pingOrigin}/api/block`, {
+				method: 'GET',
+				cache: 'no-store',
+				headers: { Authorization: auth }
+			});
+			
 			if (res.ok) applyBlockData(await res.json());
-		} catch (_) { blk.nextFetchAt = Date.now() + 10000; }
+		} catch (_) {}
 	}
 	
 	function remotePlayerMap() {
@@ -1955,7 +1977,6 @@
 	function blockEnsure() {
 		refreshLocalBlocked();
 		hookBlockFeatures();
-		if (Date.now() >= blk.nextFetchAt && getAuthHeader()) fetchBlocklist();
 	}
 
 	// ------------------------------------------------------------------
