@@ -85,6 +85,7 @@
 			emojiTabTrickcal: "1",
 			emojiTabTrickcal2: "2",
 			emojiTabTrickcal3: "3",
+			emojiTabTrickcal4: "4",
 			emojiTabFav: "💚",
 			emojiNoFavs: "No favorite emojis yet. Right-click an emoji to add it!",
 			emojiWarning: "Remember you can submit emoji images in our Support Discord Server!\nOnly other Mod users will be able to see your custom emojis! So use at ease!",
@@ -452,13 +453,14 @@
 		{ id: 'trickcal', file: 'emojis2.txt', tab: 'tabTrickcal' },
 		{ id: 'trickcal2', file: 'emojis3.txt', tab: 'tabTrickcal2' },
 		{ id: 'trickcal3', file: 'emojis4.txt', tab: 'tabTrickcal3' },
+		{ id: 'trickcal4', file: 'emojis5.txt', tab: 'tabTrickcal4' },
 	];
 	const STANDARD_EMOJIS = ['👍', '👎', '👋', '🙏', '👏', '🙌', '🤝', '😊', '😂', '🤣', '😍', '😎', '🤔', '😅', '😭', '🥺', '🔥', '💯', '❤️', '✨', '🎉', '💀', '👀', '🗣️', '💰', '💎', '🟣', '⭐', '❌', '✅', '💪', '🤷', '🤦', '🎈', '🎂', '🥳', '🙄', '🤐', '🥵', '🥶', '🤯', '😴', '🤮', '🤡', '👻', '👽', '💩', '🤖', '🎃'];
 
-	const emoji = { packs: { custom: {}, trickcal: {}, trickcal2: {}, trickcal3: {} }, all: {} };
+	const emoji = { packs: { custom: {}, trickcal: {}, trickcal2: {}, trickcal3: {}, trickcal4: {} }, all: {} };
 
 	function rebuildEmojiIndex() {
-		emoji.all = Object.assign({}, emoji.packs.custom, emoji.packs.trickcal, emoji.packs.trickcal2, emoji.packs.trickcal3);
+		emoji.all = Object.assign({}, emoji.packs.custom, emoji.packs.trickcal, emoji.packs.trickcal2, emoji.packs.trickcal3, emoji.packs.trickcal4);
 	}
 
 	function parseCatalog(text) {
@@ -885,6 +887,7 @@
 		header.appendChild(tabBtn('trickcal', '🍀 ' + T('emojiTabTrickcal')));
 		header.appendChild(tabBtn('trickcal2', '🍀 ' + T('emojiTabTrickcal2')));
 		header.appendChild(tabBtn('trickcal3', '🍀 ' + T('emojiTabTrickcal3')));
+		header.appendChild(tabBtn('trickcal4', '🍀 ' + T('emojiTabTrickcal4')));
 		header.appendChild(tabBtn('fav', T('emojiTabFav')));
 
 		const btnSizePlus = document.createElement('button');
