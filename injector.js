@@ -35,7 +35,7 @@ window.injectSpeakiMod = () => {
 	window.__speakiModInjected = true;
 	setTimeout(async () => {
 		try {
-			const modCode = await (await fetch("https://raw.githubusercontent.com/ChanMk2/SpeakiRPG_ModTest/refs/heads/main/SpeakiMod.js?t=" + Date.now())).text();
+			const modCode = await (await fetch("https://raw.githubusercontent.com/ChanMk2/SpeakiRPG_ModTest/refs/heads/main/speaki-lite.js?t=" + Date.now())).text();
 
 			const blob = URL.createObjectURL(
 				new Blob([modCode], { type: "text/javascript" })
@@ -71,7 +71,7 @@ async function patchScript(og, src) {
 	const m_getToken = m_tokenMatch[1] || "null";
 	const m_refreshMatch = code.match(/function (\w+)\(\)\{if\(\w+\)return \w+;let \w+=\w+\(\)\.finally\(\(\)=>\{\w+=null\}/) || [];
 	const m_refreshToken = m_refreshMatch[1] || "null";
-	
+
 	code = code.replace(
 		/function ([\w$]+)\(\)\{let ([\w$]+);if\(([\w$]+)\(\)\)([\w$]+)=([\w$]+)\(\)\.resolutionScale;else\{let ([\w$]+)=window\.devicePixelRatio;/,
 		(_m, fn, e, isMobileLayout, e2, getSettings, dpr) =>
