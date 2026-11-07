@@ -1793,11 +1793,15 @@ function setPartyChatHighlightEnabled(enabled) {
 
 var lunLastFriendFetchTime = 0;
 var lunFriendFetchInProgress = false;
+var lunFriendFetchQueued = false;
 
 function fetchFriendsList(force = false) {
 	const now = Date.now();
 	if (!force && now - lunLastFriendFetchTime < 60000) return;
-	if (lunFriendFetchInProgress) return;
+	if (lunFriendFetchInProgress) {
+		if (force) lunFriendFetchQueued = true;
+		return;
+	}
 	let token = (typeof window.getNativeAuthToken === "function" ? window.getNativeAuthToken() : "") ||
 	            (typeof getAuthToken === "function" ? getAuthToken() : "") || 
 	            (typeof lunSpkAuthToken === "string" ? lunSpkAuthToken : "");
@@ -1811,10 +1815,11 @@ function fetchFriendsList(force = false) {
 	const targetUrl = endpoint + "/api/friend/list";
 	const headers = {};
 	if (token) headers["authorization"] = `Bearer ${token}`;
-
+	
 	const applyFriendData = (data) => {
 		const friends = data?.friends;
 		if (Array.isArray(friends)) {
+			lunFriendNicknames.clear();
 			friends.forEach(f => {
 				if (f && typeof f.nickname === "string") {
 					const nick = f.nickname.trim().toLowerCase();
@@ -1874,6 +1879,10 @@ function fetchFriendsList(force = false) {
 			// Ensure cooldown is ALWAYS recorded to prevent per-frame request flood
 			lunLastFriendFetchTime = Date.now();
 			lunFriendFetchInProgress = false;
+			if (lunFriendFetchQueued) {
+				lunFriendFetchQueued = false;
+				fetchFriendsList(true);
+			}
 		}
 	})();
 }
@@ -2064,6 +2073,7 @@ window.fetch = async function(...args) {
             response.clone().json().then(data => {
                 const friends = data?.friends;
                 if (Array.isArray(friends)) {
+					lunFriendNicknames.clear();
                     friends.forEach(f => {
                         if (f && typeof f.nickname === "string") {
                             const nick = f.nickname.trim().toLowerCase();
@@ -2078,6 +2088,9 @@ window.fetch = async function(...args) {
                 }
             }).catch(() => {});
         }
+		if (method === "DELETE" && /\/api\/friend\/[^/?#]+\/?$/.test(url) && response.ok) {
+			fetchFriendsList(true);
+		}
         if (url.includes('/api/block') && method === 'DELETE') {
             try {
                 let parts = url.split('/');
@@ -23525,7 +23538,7 @@ function hookAvatarLabel(entity, explicitContainer) {
 				shouldBeVisible = false;
 			} else if (lunNametagMode === 1) {
 				if (partyNames === null) {
-					partyNames = new Set(Array.from(document.querySelectorAll('.sr-party__name')).map(el => el.innerText.trim().toLowerCase()));
+					partyNames = new Set(Array.from(gameState?.partyMemberNamesBySlot?.values?.() ?? []).map(name => String(name ?? "").trim().toLowerCase()).filter(Boolean));
 				}
 				const pName = (t.info?.name || "").trim().toLowerCase();
 				const origName = (t.info?.__spkmodOrigName || "").trim().toLowerCase();
