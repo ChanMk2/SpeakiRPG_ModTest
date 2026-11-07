@@ -1777,6 +1777,36 @@ if (window.localStorage) {
 		}
 	} catch (e) { }
 }
+
+var lunFriendshipNicknamesById = new Map();
+
+function replaceFriendNicknames(data) {
+    const friends = data?.friends;
+
+    if (!Array.isArray(friends)) return;
+
+    const nextNames = new Set();
+    const nextIds = new Map();
+
+    for (const f of friends) {
+        if (typeof f?.nickname !== "string") continue;
+        const nick = f.nickname.trim().toLowerCase();
+        if (!nick) continue;
+        nextNames.add(nick);
+        if (f.friendshipId != null) nextIds.set(String(f.friendshipId), nick);
+    }
+
+    lunFriendNicknames.clear();
+
+    for (const nick of nextNames) lunFriendNicknames.add(nick);
+
+    lunFriendshipNicknamesById = nextIds;
+
+    try {
+        localStorage.setItem("spkmod-friend-cache", JSON.stringify([...lunFriendNicknames]));
+    } catch (_) {}
+}
+
 var lunFriendChatHighlightEnabled = (window.localStorage && localStorage.getItem("spkmod-friend-highlight-enabled")) === "true";
 
 function setFriendChatHighlightEnabled(enabled) {
@@ -1816,23 +1846,7 @@ function fetchFriendsList(force = false) {
 	const headers = {};
 	if (token) headers["authorization"] = `Bearer ${token}`;
 	
-	const applyFriendData = (data) => {
-		const friends = data?.friends;
-		if (Array.isArray(friends)) {
-			lunFriendNicknames.clear();
-			friends.forEach(f => {
-				if (f && typeof f.nickname === "string") {
-					const nick = f.nickname.trim().toLowerCase();
-					if (nick) lunFriendNicknames.add(nick);
-				}
-			});
-			if (window.localStorage) {
-				try {
-					localStorage.setItem("spkmod-friend-cache", JSON.stringify([...lunFriendNicknames]));
-				} catch(e) {}
-			}
-		}
-	};
+	const applyFriendData = replaceFriendNicknames;
 
 	(async () => {
 		try {
@@ -2069,26 +2083,20 @@ window.fetch = async function(...args) {
                 }
             }).catch(() => {});
         }
-        if (url.includes('/api/friend/list')) {
-            response.clone().json().then(data => {
-                const friends = data?.friends;
-                if (Array.isArray(friends)) {
-					lunFriendNicknames.clear();
-                    friends.forEach(f => {
-                        if (f && typeof f.nickname === "string") {
-                            const nick = f.nickname.trim().toLowerCase();
-                            if (nick) lunFriendNicknames.add(nick);
-                        }
-                    });
-                    if (window.localStorage) {
-                        try {
-                            localStorage.setItem("spkmod-friend-cache", JSON.stringify([...lunFriendNicknames]));
-                        } catch(e) {}
-                    }
-                }
-            }).catch(() => {});
-        }
-		if (method === "DELETE" && /\/api\/friend\/[^/?#]+\/?$/.test(url) && response.ok) {
+		if (url.includes('/api/friend/list')) {
+			response.clone().json().then(replaceFriendNicknames).catch(() => {});
+		}
+		const friendDeleteMatch = url.match(/\/api\/friend\/([^/?#]+)\/?$/);
+		if (method === "DELETE" && response.ok && friendDeleteMatch) {
+			const friendshipId = decodeURIComponent(friendDeleteMatch[1]);
+			const deletedNickname = lunFriendshipNicknamesById.get(friendshipId);
+			if (deletedNickname) {
+				lunFriendNicknames.delete(deletedNickname);
+				lunFriendshipNicknamesById.delete(friendshipId);
+				try {
+					localStorage.setItem("spkmod-friend-cache", JSON.stringify([...lunFriendNicknames]));
+				} catch (_) {}
+			}
 			fetchFriendsList(true);
 		}
         if (url.includes('/api/block') && method === 'DELETE') {
