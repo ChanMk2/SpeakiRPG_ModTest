@@ -2132,13 +2132,15 @@ async function spkmodFetchBlocklist() {
             if (Array.isArray(data?.blocks)) {
                 cachedBlockedNames.clear();
                 cachedBlockIds.clear();
-                data.blocks.forEach(b => {
-                    if (b.nickname) {
-                        let n = b.nickname.trim().toLocaleLowerCase();
-                        cachedBlockedNames.add(n);
-                        if (b.blockId) cachedBlockIds.set(String(b.blockId), n);
-                    }
-                });
+				data.blocks.forEach(b => {
+					if (typeof b?.nickname !== "string") return;
+					const n = b.nickname.trim().toLocaleLowerCase();
+					if (!n) return;
+					cachedBlockedNames.add(n);
+					if (b.blockId != null) {
+						cachedBlockIds.set(String(b.blockId), n);
+					}
+				});
                 if (typeof updateKnownBotVisibility === 'function') updateKnownBotVisibility();
             }
         }
@@ -2179,11 +2181,13 @@ window.fetch = async function(...args) {
 			if (method === 'DELETE' && blockDeleteMatch) {
 				const blockId = decodeURIComponent(blockDeleteMatch[1]);
 				const nickname = cachedBlockIds.get(blockId);
-				if (nickname) {
-					cachedBlockedNames.delete(nickname);
-				}
 				cachedBlockIds.delete(blockId);
-				if (typeof updateKnownBotVisibility === 'function') updateKnownBotVisibility();
+				if (typeof nickname === "string" && nickname) {
+					cachedBlockedNames.delete(nickname);
+					if (typeof updateKnownBotVisibility === 'function') updateKnownBotVisibility();
+				} else {
+					spkmodFetchBlocklist();
+				}
 			}			
 			else if (url.includes('/api/block') && !blockDeleteMatch) {
 				response.clone().json().then(data => {
@@ -2191,21 +2195,21 @@ window.fetch = async function(...args) {
             			cachedBlockedNames.clear();
             			cachedBlockIds.clear();
 						data.blocks.forEach(b => {
-							if (b.nickname) {
-								const n = b.nickname.trim().toLocaleLowerCase();
-								cachedBlockedNames.add(n);
-								if (b.blockId) {
-									cachedBlockIds.set(String(b.blockId), n);
-								}
-                			}
-            			});
+							if (typeof b?.nickname !== "string") return;
+							const n = b.nickname.trim().toLocaleLowerCase();
+							if (!n) return;
+							cachedBlockedNames.add(n);
+							if (b.blockId != null) {
+								cachedBlockIds.set(String(b.blockId), n);
+							}
+						});
 						if (typeof updateKnownBotVisibility === 'function') updateKnownBotVisibility();
 					}
-					else if (data && data.nickname) {
+					else if (typeof data?.nickname === "string") {
 						const n = data.nickname.trim().toLocaleLowerCase();
 						if (n) {
 							cachedBlockedNames.add(n);
-							if (data.blockId) {
+							if (data.blockId != null) {
 								cachedBlockIds.set(String(data.blockId), n);
 							}
 							if (typeof updateKnownBotVisibility === 'function') updateKnownBotVisibility();
@@ -2259,35 +2263,37 @@ XMLHttpRequest.prototype.send = function() {
 			try {
 				const blockDeleteMatch = this._spkUrl.match(/\/api\/block\/([^/?#]+)\/?(?:[?#]|$)/);
 				if (this._spkMethod === 'DELETE' && blockDeleteMatch) {
-                    const blockId = decodeURIComponent(blockDeleteMatch[1]);
-                    const nickname = cachedBlockIds.get(blockId);
-					if (nickname) {
-						cachedBlockedNames.delete(nickname);
-					}
+					const blockId = decodeURIComponent(blockDeleteMatch[1]);
+					const nickname = cachedBlockIds.get(blockId);
 					cachedBlockIds.delete(blockId);
-					if (typeof updateKnownBotVisibility === 'function') updateKnownBotVisibility();
+					if (typeof nickname === "string" && nickname) {
+						cachedBlockedNames.delete(nickname);
+						if (typeof updateKnownBotVisibility === 'function') updateKnownBotVisibility();
+					} else {
+						spkmodFetchBlocklist();
+					}
                 }
                 else if (!blockDeleteMatch) {
                     const data = JSON.parse(this.responseText);
                     if (Array.isArray(data?.blocks)) {
                         cachedBlockedNames.clear();
                         cachedBlockIds.clear();
-                        data.blocks.forEach(b => {
-                            if (b.nickname) {
-								const n = b.nickname.trim().toLocaleLowerCase();
-                                cachedBlockedNames.add(n);
-                                if (b.blockId) {
-                                    cachedBlockIds.set(String(b.blockId), n);
-                                }
-                            }
-                        });
+						data.blocks.forEach(b => {
+							if (typeof b?.nickname !== "string") return;
+							const n = b.nickname.trim().toLocaleLowerCase();
+							if (!n) return;
+							cachedBlockedNames.add(n);
+							if (b.blockId != null) {
+								cachedBlockIds.set(String(b.blockId), n);
+							}
+						});
                         if (typeof updateKnownBotVisibility === 'function') updateKnownBotVisibility();
                     }
-                    else if (data && data.nickname) {
+                    else if (typeof data?.nickname === "string") {
                         const n = data.nickname.trim().toLocaleLowerCase();
                         if (n) {
                             cachedBlockedNames.add(n);
-                            if (data.blockId) {
+                            if (data.blockId != null) {
                                 cachedBlockIds.set(String(data.blockId), n);
                             }
                             if (typeof updateKnownBotVisibility === 'function') updateKnownBotVisibility();
