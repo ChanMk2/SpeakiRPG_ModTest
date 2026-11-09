@@ -2229,7 +2229,6 @@ window.fetch = async function(...args) {
 const origOpen = XMLHttpRequest.prototype.open;
 XMLHttpRequest.prototype.open = function(method, url) {
     this._spkUrl = url;
-    this._spkMethod = method;
     return origOpen.apply(this, arguments);
 };
 const origSetReqHeader = XMLHttpRequest.prototype.setRequestHeader;
@@ -2243,45 +2242,38 @@ XMLHttpRequest.prototype.setRequestHeader = function(header, value) {
 const origSend = XMLHttpRequest.prototype.send;
 XMLHttpRequest.prototype.send = function() {
     this.addEventListener('load', function() {
-        if (this._spkUrl && typeof this._spkUrl === 'string' && this._spkUrl.includes('/api/block')) {
+        if (this.status >= 200 && this.status < 300 && this._spkUrl && typeof this._spkUrl === 'string' && this._spkUrl.includes('/api/block')) {
             try {
-                const data = JSON.parse(this.responseText);
-                if (data && data.blocks) {
-                    cachedBlockedNames.clear();
+				const data = JSON.parse(this.responseText);
+				if (Array.isArray(data?.blocks)) {
+					cachedBlockedNames.clear();
                     cachedBlockIds.clear();
-                    data.blocks.forEach(b => {
-                        if (b.nickname) {
-                            let n = b.nickname.trim().toLocaleLowerCase();
-                            cachedBlockedNames.add(n);
-                            if (b.blockId) cachedBlockIds.set(String(b.blockId), n);
-                        }
-                    });
-                    if (typeof updateKnownBotVisibility === 'function') updateKnownBotVisibility();
-                } else if (data && data.nickname) {
-                    let n = data.nickname.trim().toLocaleLowerCase();
-                    cachedBlockedNames.add(n);
-                    if (data.blockId) cachedBlockIds.set(String(data.blockId), n);
+					data.blocks.forEach(b => {
+						if (b.nickname) {
+							const n = b.nickname.trim().toLocaleLowerCase();
+							cachedBlockedNames.add(n);
+							if (b.blockId != null) {
+								cachedBlockIds.set(String(b.blockId), n);
+							}
+						}
+					});
                     if (typeof updateKnownBotVisibility === 'function') updateKnownBotVisibility();
                 }
-            } catch(e) {}
-            if (this._spkMethod && typeof this._spkMethod === 'string' && this._spkMethod.toUpperCase() === 'DELETE') {
-                try {
-                    let parts = this._spkUrl.split('/');
-                    let bId = parts[parts.length - 1];
-                    if (bId && cachedBlockIds.has(bId)) {
-                        cachedBlockedNames.delete(cachedBlockIds.get(bId));
-                        cachedBlockIds.delete(bId);
-                        if (typeof updateKnownBotVisibility === 'function') updateKnownBotVisibility();
+                else if (data && typeof data.nickname === 'string') {
+                    const n = data.nickname.trim().toLocaleLowerCase();
+					if (n) {
+						cachedBlockedNames.add(n);
+						if (data.blockId != null) {
+							cachedBlockIds.set(String(data.blockId), n);
+                        }
+						if (typeof updateKnownBotVisibility === 'function') updateKnownBotVisibility();
                     }
-                } catch(e) {}
-                setTimeout(spkmodFetchBlocklist, 1500);
-            }
+                }
+            } catch (_) {}
         }
     });
     return origSend.apply(this, arguments);
 };
-
-
 
 function isBlockedUser(name) {
     if (typeof name !== "string") return false;
