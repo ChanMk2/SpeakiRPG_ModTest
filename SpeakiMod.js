@@ -2174,39 +2174,32 @@ window.fetch = async function(...args) {
 			method = method.toUpperCase();
 			const friendDeleteMatch = url.match(/\/api\/friend\/([^/?#]+)\/?$/);
 			
-			if (method === 'DELETE' && url.includes('/api/block')) {
-				try {
-					let parts = url.split('/');
-					let bId = parts[parts.length - 1];
-					if (bId && cachedBlockIds.has(bId)) {
-						cachedBlockedNames.delete(cachedBlockIds.get(bId));
-						cachedBlockIds.delete(bId);
+			if (url.includes('/api/block')) {
+				response.clone().json().then(data => {
+        			if (Array.isArray(data?.blocks)) {
+            			cachedBlockedNames.clear();
+            			cachedBlockIds.clear();
+						data.blocks.forEach(b => {
+							if (b.nickname) {
+								let n = b.nickname.trim().toLocaleLowerCase();
+								cachedBlockedNames.add(n);
+								if (b.blockId) {
+									cachedBlockIds.set(String(b.blockId), n);
+								}
+                			}
+            			});
 						if (typeof updateKnownBotVisibility === 'function') updateKnownBotVisibility();
 					}
-				} catch(e) {}
-				setTimeout(spkmodFetchBlocklist, 1500);
+					else if (data && data.nickname) {
+						let n = data.nickname.trim().toLocaleLowerCase();
+						cachedBlockedNames.add(n);
+						if (data.blockId) {
+							cachedBlockIds.set(String(data.blockId), n);
+						}
+						if (typeof updateKnownBotVisibility === 'function') updateKnownBotVisibility();
+					}
+				}).catch(() => {});
 			}
-			else if (url.includes('/api/block')) {
-				response.clone().json().then(data => {
-                    if (data && data.blocks) {
-                        cachedBlockedNames.clear();
-                        cachedBlockIds.clear();
-                        data.blocks.forEach(b => {
-                            if (b.nickname) {
-                                let n = b.nickname.trim().toLocaleLowerCase();
-                                cachedBlockedNames.add(n);
-                                if (b.blockId) cachedBlockIds.set(String(b.blockId), n);
-                            }
-                        });
-                        if (typeof updateKnownBotVisibility === 'function') updateKnownBotVisibility();
-                    } else if (data && data.nickname) {
-                        let n = data.nickname.trim().toLocaleLowerCase();
-                        cachedBlockedNames.add(n);
-                        if (data.blockId) cachedBlockIds.set(String(data.blockId), n);
-                        if (typeof updateKnownBotVisibility === 'function') updateKnownBotVisibility();
-                    }
-			    }).catch(() => {});
-		    }
 		    else if (url.includes('/api/friend/list')) {
 			    try {
 				    const data = await response.clone().json();
