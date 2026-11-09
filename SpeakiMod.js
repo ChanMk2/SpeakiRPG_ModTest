@@ -14655,11 +14655,13 @@ function hijackAndRename(player, newName, newLevel) {
 		// Fix WebGL Texture Remnant Bug: 
 		// If the new name is shorter, shrinking the canvas leaves old pixels in the GPU buffer.
 		// We must explicitly dispose the old map to force three.js to reallocate a fresh one.
-		player.container.traverse(obj => {
-			if (obj && obj.isSprite && obj.material && obj.material.map && obj.position && obj.position.y > 1.0) {
-				obj.material.map.dispose();
-			}
-		});
+		if (!player.avatar.__spkmodLabelPatched) {
+			player.container.traverse(obj => {
+				if (obj && obj.isSprite && obj.material && obj.material.map && obj.position && obj.position.y > 1.0) {
+					obj.material.map.dispose();
+				}
+			});
+		}
 		
 		// The game natively splits and formats "LV<level> <name>"
 		player.avatar.setLabel("LV" + lvl + " " + newName);
@@ -14747,7 +14749,7 @@ window.spkmodResetNames = function() {
 				if (entity.avatar && typeof entity.avatar.setLabel === 'function') {
 					let lvl = (entity.info && entity.info.level) ? entity.info.level : 1;
 					
-					if (entity.container) {
+					if (entity.container && !entity.avatar.__spkmodLabelPatched) {
 						entity.container.traverse(obj => {
 							if (obj && obj.isSprite && obj.material && obj.material.map && obj.position && obj.position.y > 1.0) {
 								obj.material.map.dispose();
