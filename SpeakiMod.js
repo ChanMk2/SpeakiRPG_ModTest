@@ -1911,12 +1911,13 @@ function replaceFriendNicknames(data) {
     for (const nick of nextNames) lunFriendNicknames.add(nick);
 
     lunFriendshipNicknamesById = nextIds;
-
-    try {
-        localStorage.setItem("spkmod-friend-cache", JSON.stringify([...lunFriendNicknames]));
-    } catch (_) {}
-
-	if (namesChanged && lunNametagMode === 2) refreshAllNametags();
+	
+	if (namesChanged) {
+		try {
+			localStorage.setItem("spkmod-friend-cache", JSON.stringify([...lunFriendNicknames]));
+		} catch (_) {}
+		if (lunNametagMode === 2) refreshAllNametags();
+	}
 }
 
 var lunFriendChatHighlightEnabled = (window.localStorage && localStorage.getItem("spkmod-friend-highlight-enabled")) === "true";
@@ -2183,7 +2184,6 @@ window.fetch = async function(...args) {
 				}
 				cachedBlockIds.delete(blockId);
 				if (typeof updateKnownBotVisibility === 'function') updateKnownBotVisibility();
-				setTimeout(spkmodFetchBlocklist, 1500);
 			}			
 			else if (url.includes('/api/block') && !blockDeleteMatch) {
 				response.clone().json().then(data => {
@@ -2192,7 +2192,7 @@ window.fetch = async function(...args) {
             			cachedBlockIds.clear();
 						data.blocks.forEach(b => {
 							if (b.nickname) {
-								let n = b.nickname.trim().toLocaleLowerCase();
+								const n = b.nickname.trim().toLocaleLowerCase();
 								cachedBlockedNames.add(n);
 								if (b.blockId) {
 									cachedBlockIds.set(String(b.blockId), n);
@@ -2202,12 +2202,14 @@ window.fetch = async function(...args) {
 						if (typeof updateKnownBotVisibility === 'function') updateKnownBotVisibility();
 					}
 					else if (data && data.nickname) {
-						let n = data.nickname.trim().toLocaleLowerCase();
-						cachedBlockedNames.add(n);
-						if (data.blockId) {
-							cachedBlockIds.set(String(data.blockId), n);
+						const n = data.nickname.trim().toLocaleLowerCase();
+						if (n) {
+							cachedBlockedNames.add(n);
+							if (data.blockId) {
+								cachedBlockIds.set(String(data.blockId), n);
+							}
+							if (typeof updateKnownBotVisibility === 'function') updateKnownBotVisibility();
 						}
-						if (typeof updateKnownBotVisibility === 'function') updateKnownBotVisibility();
 					}
 				}).catch(() => {});
 			}
@@ -2264,7 +2266,6 @@ XMLHttpRequest.prototype.send = function() {
 					}
 					cachedBlockIds.delete(blockId);
 					if (typeof updateKnownBotVisibility === 'function') updateKnownBotVisibility();
-                    setTimeout(spkmodFetchBlocklist, 1500);
                 }
                 else if (!blockDeleteMatch) {
                     const data = JSON.parse(this.responseText);
