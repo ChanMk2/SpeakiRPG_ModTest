@@ -1955,11 +1955,49 @@ function refreshAllNametags() {
 function hookNametagAvatarReplacement(player) {
     if (!player || player.__spkmodAvatarNametagHooked) return;
 
-    const descriptor = Object.getOwnPropertyDescriptor(player, "avatar");
+    const ownDescriptor = Object.getOwnPropertyDescriptor(player, "avatar");
 
-    if (descriptor && descriptor.configurable === false) return;
+    let descriptor = ownDescriptor;
 
-    let currentAvatar = player.avatar;
+    // Search the prototype chain for the native avatar descriptor.
+    if (!descriptor) {
+        let proto = Object.getPrototypeOf(player);
+
+        while (proto && !descriptor) {
+            descriptor = Object.getOwnPropertyDescriptor(proto, "avatar");
+            proto = Object.getPrototypeOf(proto);
+        }
+    }
+
+    // Do not override non-configurable own properties.
+    if (ownDescriptor && ownDescriptor.configurable === false) return;
+
+    const isAccessor = !!descriptor &&
+        ("get" in descriptor || "set" in descriptor);
+
+    const originalGetter = isAccessor ? descriptor.get : null;
+    const originalSetter = isAccessor ? descriptor.set : null;
+
+    // Preserve read-only properties.
+    if (isAccessor && typeof originalSetter !== "function") return;
+
+    if (
+        descriptor &&
+        !isAccessor &&
+        descriptor.writable === false
+    ) return;
+
+    let currentAvatar;
+
+    try {
+        currentAvatar = typeof originalGetter === "function"
+            ? originalGetter.call(player)
+            : descriptor && "value" in descriptor
+                ? descriptor.value
+                : player.avatar;
+    } catch (_) {
+        currentAvatar = player.avatar;
+    }
 
     try {
         Object.defineProperty(player, "avatar", {
@@ -1967,29 +2005,46 @@ function hookNametagAvatarReplacement(player) {
             enumerable: descriptor?.enumerable ?? true,
 
             get() {
+                if (typeof originalGetter === "function") {
+                    return originalGetter.call(this);
+                }
+
                 return currentAvatar;
             },
 
             set(nextAvatar) {
-                currentAvatar = nextAvatar;
+                // CRITICAL: Preserve the game's original avatar setter.
+                if (typeof originalSetter === "function") {
+                    originalSetter.call(this, nextAvatar);
 
-                // Previous nametag belongs to the old avatar.
+                    if (typeof originalGetter !== "function") {
+                        currentAvatar = nextAvatar;
+                    }
+                } else {
+                    currentAvatar = nextAvatar;
+                }
+
                 delete player.__spkmodNametagSprite;
 
-                if (!nextAvatar) return;
-				
-				// Hook the new avatar's setLabel method.
-				hookAvatarLabel(player);
-				
-				// Apply current nametag visibility.
-				applyPlayerNametagVisibility(player);
+                const actualAvatar =
+                    typeof originalGetter === "function"
+                        ? originalGetter.call(this)
+                        : currentAvatar;
+
+                if (!actualAvatar) return;
+
+                hookAvatarLabel(player);
+                applyPlayerNametagVisibility(player);
             }
         });
 
         player.__spkmodAvatarNametagHooked = true;
 
     } catch (err) {
-        console.warn("[SpeakiMod+] Failed to hook avatar replacement:", err);
+        console.warn(
+            "[SpeakiMod+] Failed to hook avatar replacement:",
+            err
+        );
     }
 }
 
