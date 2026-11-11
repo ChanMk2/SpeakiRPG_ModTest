@@ -1952,6 +1952,59 @@ function refreshAllNametags() {
     });
 }
 
+function hookAvatarLabel(entity, explicitContainer) {
+	if (!entity || !entity.avatar) return;
+	const avatar = entity.avatar;
+	if (typeof avatar.setLabel !== 'function' || avatar.__spkmodLabelPatched) return;
+
+	const resolveContainer = () => explicitContainer || entity.container || entity.root || avatar.root || (typeof entity.traverse === 'function' ? entity : null);
+
+	const origSetLabel = avatar.setLabel;
+	avatar.setLabel = function(text, ...args) {
+		if (typeof text === 'string' && text.length > 0 && (!lunHidePlayerLevels || text.startsWith("LV"))) {
+			avatar.__spkmodLastRawLabel = text;
+		}
+		if (lunHidePlayerLevels && typeof text === 'string' && text.startsWith("LV")) {
+			const spaceIdx = text.indexOf(" ");
+			if (spaceIdx !== -1) {
+				text = text.substring(spaceIdx + 1); // remove "LVxxx "
+			}
+		}
+
+		try {
+			const targetContainer = resolveContainer();
+			if (targetContainer && typeof targetContainer.traverse === 'function') {
+				targetContainer.traverse(obj => {
+					// Position check ensures we only hit the floating nametag sprite above the player
+					if (obj && obj.isSprite && obj.material && obj.material.map && obj.position && obj.position.y > 1.0) {
+						obj.material.map.dispose();
+
+						if (obj.material.map.image && typeof obj.material.map.image.getContext === 'function') {
+							const ctx = obj.material.map.image.getContext('2d');
+							ctx.clearRect(0, 0, obj.material.map.image.width, obj.material.map.image.height);
+						}
+					}
+				});
+			}
+		} catch(e) {}
+
+		return origSetLabel.call(this, text, ...args);
+	};
+	avatar.__spkmodLabelPatched = true;
+
+	// Force redraw with current text if level-hiding or a custom font is active
+	if (lunHidePlayerLevels || (typeof lunFontPreset !== "undefined" && lunFontPreset !== "default")) {
+		if (entity.info && entity.info.name) {
+			const lvl = entity.info.__spkmodOrigLevel || entity.info.level || 1;
+			avatar.setLabel("LV" + lvl + " " + entity.info.name);
+		} else if (entity === gameState.playerContainer || entity.isLocalPlayer) {
+			const lvl = (gameState.myStat && gameState.myStat.level) ? gameState.myStat.level : 1;
+			const name = (gameState.myPlayerName || (gameState.myStat && gameState.myStat.name)) || "";
+			if (name) avatar.setLabel("LV" + lvl + " " + name);
+		}
+	}
+}
+
 function hookNametagAvatarReplacement(player) {
     if (!player || player.__spkmodAvatarNametagHooked) return;
 
@@ -25977,60 +26030,6 @@ window.spkmodForceNametagRedraw = function() {
 		if (name) gameState.localAvatar.setLabel("LV" + lvl + " " + name);
 	}
 };
-
-function hookAvatarLabel(entity, explicitContainer) {
-	if (!entity || !entity.avatar) return;
-	const avatar = entity.avatar;
-	if (typeof avatar.setLabel !== 'function' || avatar.__spkmodLabelPatched) return;
-
-	const resolveContainer = () => explicitContainer || entity.container || entity.root || avatar.root || (typeof entity.traverse === 'function' ? entity : null);
-
-	const origSetLabel = avatar.setLabel;
-	avatar.setLabel = function(text, ...args) {
-		if (typeof text === 'string' && text.length > 0 && (!lunHidePlayerLevels || text.startsWith("LV"))) {
-			avatar.__spkmodLastRawLabel = text;
-		}
-		if (lunHidePlayerLevels && typeof text === 'string' && text.startsWith("LV")) {
-			const spaceIdx = text.indexOf(" ");
-			if (spaceIdx !== -1) {
-				text = text.substring(spaceIdx + 1); // remove "LVxxx "
-			}
-		}
-
-		try {
-			const targetContainer = resolveContainer();
-			if (targetContainer && typeof targetContainer.traverse === 'function') {
-				targetContainer.traverse(obj => {
-					// Position check ensures we only hit the floating nametag sprite above the player
-					if (obj && obj.isSprite && obj.material && obj.material.map && obj.position && obj.position.y > 1.0) {
-						obj.material.map.dispose();
-
-						if (obj.material.map.image && typeof obj.material.map.image.getContext === 'function') {
-							const ctx = obj.material.map.image.getContext('2d');
-							ctx.clearRect(0, 0, obj.material.map.image.width, obj.material.map.image.height);
-						}
-					}
-				});
-			}
-		} catch(e) {}
-
-		return origSetLabel.call(this, text, ...args);
-	};
-	avatar.__spkmodLabelPatched = true;
-
-	// Force redraw with current text if level-hiding or a custom font is active
-	if (lunHidePlayerLevels || (typeof lunFontPreset !== "undefined" && lunFontPreset !== "default")) {
-		if (entity.info && entity.info.name) {
-			const lvl = entity.info.__spkmodOrigLevel || entity.info.level || 1;
-			avatar.setLabel("LV" + lvl + " " + entity.info.name);
-		} else if (entity === gameState.playerContainer || entity.isLocalPlayer) {
-			const lvl = (gameState.myStat && gameState.myStat.level) ? gameState.myStat.level : 1;
-			const name = (gameState.myPlayerName || (gameState.myStat && gameState.myStat.name)) || "";
-			if (name) avatar.setLabel("LV" + lvl + " " + name);
-		}
-	}
-}
-
 
 	if (lunPanelElements.renameLevelInput && lunPanelElements.renameLevelInput.style.display === "none") {
 		let isVip = false;
