@@ -339,7 +339,8 @@ var SPKMOD_CINEMA_DEFAULT_CONFIG = {
 	pos: { x: 75.0, y: 4.2, z: 32.5 },
 	rotationY: 1.6000,
 	width: 12.8,
-	height: 7.2
+	height: 7.2,
+	occlusion: true
 };
 
 window.spkmodCinemaConfig = Object.assign({}, SPKMOD_CINEMA_DEFAULT_CONFIG);
@@ -355,6 +356,8 @@ if (typeof window !== "undefined" && window.localStorage) {
 		if (mutedStr !== null) window.spkmodCinemaConfig.muted = mutedStr === "true";
 		const vol = localStorage.getItem("spkmod-cinema-volume");
 		if (vol !== null) window.spkmodCinemaConfig.volume = parseInt(vol, 10) || 80;
+		const occ = localStorage.getItem("spkmod-cinema-occlusion");
+		if (occ !== null) window.spkmodCinemaConfig.occlusion = occ === "true";
 		const posStr = localStorage.getItem("spkmod-cinema-pos");
 		if (posStr) {
 			const parsed = JSON.parse(posStr);
@@ -5366,8 +5369,13 @@ function suppressGameBgm(mute) {
 				}
 			} catch (_) {}
 		}
-		if (currentVol === null || currentVol <= 0) currentVol = getUserActualBgmVolume() ?? 70; // Native game default is 70
-		if (currentVol <= 0) currentVol = 70;
+		if (currentVol === null) {
+			currentVol = getUserActualBgmVolume();
+		}
+		if (currentVol === null || !Number.isFinite(currentVol) || currentVol < 0) {
+			currentVol = 70; // Native game default is 70
+		}
+		currentVol = Math.max(0, Math.min(100, Math.round(currentVol)));
 
         setUserActualBgmVolume(currentVol);
         state.isBgmSuppressed = true;
@@ -5400,7 +5408,7 @@ function suppressGameBgm(mute) {
 
         nodes.forEach(node => {
             if (node.gain?.gain) {
-                if (node.__savedGain === undefined || node.__savedGain === 0) {
+                if (node.__savedGain === undefined) {
                     node.__savedGain = node.gain.gain.value > 0 ? node.gain.gain.value : (currentVol / 100);
                 }
                 node.gain.gain.value = 0;
@@ -5420,10 +5428,10 @@ function suppressGameBgm(mute) {
         } catch (_) {}
 
         let restoreVol = getUserActualBgmVolume();
-        if (restoreVol === null || !Number.isFinite(restoreVol) || restoreVol <= 0) {
+        if (restoreVol === null || !Number.isFinite(restoreVol) || restoreVol < 0) {
             restoreVol = 70;
         }
-        restoreVol = Math.max(0, Math.min(100, restoreVol));
+        restoreVol = Math.max(0, Math.min(100, Math.round(restoreVol)));
 
         state.isSuppressingBgmInternal = true;
         try {
@@ -5450,23 +5458,31 @@ function suppressGameBgm(mute) {
 
         nodes.forEach(node => {
             if (node.gain?.gain) {
-                node.gain.gain.value = (node.__savedGain !== undefined && node.__savedGain > 0)
-                    ? node.__savedGain
-                    : (restoreVol / 100);
+                if (restoreVol === 0) {
+                    node.gain.gain.value = 0;
+                } else if (node.__savedGain !== undefined && node.__savedGain > 0) {
+                    node.gain.gain.value = node.__savedGain;
+                } else {
+                    node.gain.gain.value = restoreVol / 100;
+                }
+                delete node.__savedGain;
             }
-            if (node.isPlaying === false && typeof node.play === "function") {
+            if (restoreVol > 0 && node.isPlaying === false && typeof node.play === "function") {
                 try { node.play(); } catch (_) {}
             }
         });
 
         document.querySelectorAll("audio").forEach(el => {
             if (!el.id?.startsWith("spkmod-") && !el.closest("#spkmod-")) {
-                if (el.__savedVolume !== undefined) {
+                if (restoreVol === 0) {
+                    el.volume = 0;
+                } else if (el.__savedVolume !== undefined) {
                     el.volume = el.__savedVolume;
                 } else {
                     el.volume = restoreVol / 100;
                 }
-                if (el.paused && el.loop) {
+                delete el.__savedVolume;
+                if (restoreVol > 0 && el.paused && el.loop) {
                     try { el.play(); } catch (_) {}
                 }
             }
@@ -5479,11 +5495,38 @@ function initYouTubeApi(cb) {
         cb();
         return;
     }
-    const origReady = window.onYouTubeIframeAPIReady;
-    window.onYouTubeIframeAPIReady = function() {
-        if (typeof origReady === 'function') origReady();
-        cb();
-    };
+    if (!window.__spkmodYtCallbacks) {
+        window.__spkmodYtCallbacks = [];
+    }
+    window.__spkmodYtCallbacks.push(cb);
+
+    function flushCallbacks() {
+        if (window.__spkmodYtCallbacks && window.__spkmodYtCallbacks.length > 0) {
+            const list = window.__spkmodYtCallbacks.slice();
+            window.__spkmodYtCallbacks = [];
+            list.forEach(fn => { try { fn(); } catch (_) {} });
+        }
+    }
+
+    if (!window.__spkmodYtHooked) {
+        const origReady = window.onYouTubeIframeAPIReady;
+        window.onYouTubeIframeAPIReady = function() {
+            if (typeof origReady === 'function') {
+                try { origReady(); } catch (_) {}
+            }
+            flushCallbacks();
+        };
+        window.__spkmodYtHooked = true;
+    }
+
+    const checkTimer = setInterval(() => {
+        if (window.YT && window.YT.Player) {
+            clearInterval(checkTimer);
+            flushCallbacks();
+        }
+    }, 100);
+    setTimeout(() => clearInterval(checkTimer), 10000);
+
     if (!document.getElementById('__yt_iframe_api_script')) {
         const tag = document.createElement('script');
         tag.id = '__yt_iframe_api_script';
@@ -5497,7 +5540,10 @@ function createYtContainer() {
     if (!container) {
         container = document.createElement('div');
         container.id = 'spkmod-yt-iframe-container';
-        container.style.cssText = 'position:fixed;bottom:-500px;left:-500px;width:240px;height:160px;opacity:0.01;pointer-events:none;z-index:-1000;';
+        // In-viewport positioning ensures mobile browsers (Chromium/WebKit) do not throttle,
+        // suspend, or disallow audio/video playback inside the iframe.
+        // opacity: 0.01 and pointer-events: none ensures it is invisible to users and passes touch inputs through.
+        container.style.cssText = 'position:fixed;top:0;left:0;width:240px;height:160px;opacity:0.01;pointer-events:none;z-index:0;overflow:hidden;';
         container.innerHTML = '<div id="spkmod-yt-player-target"></div>';
         document.body.appendChild(container);
     }
@@ -5540,7 +5586,15 @@ function playTrackAtIndex(idx, userInitiated = true) {
                 videoId: item[0],
                 startSeconds: 0
             });
+            if (typeof state.player.playVideo === 'function') {
+                state.player.playVideo();
+            }
         } catch (_) {}
+    } else {
+        state.pendingPlay = true;
+        if (!state.player) {
+            initJukeboxPlayer();
+        }
     }
 }
 
@@ -5850,12 +5904,16 @@ function buildJukeboxUI() {
     const nowPlayingHeartBtn = modal.querySelector('#spkmod-jukebox-heart-btn');
 
     btnPlay.addEventListener('click', () => {
-        if (!state.player || !state.isReady) return;
+        if (!state.player || !state.isReady) {
+            state.pendingPlay = true;
+            if (!state.player) initJukeboxPlayer();
+            return;
+        }
         if (state.isPlaying) {
             state.isChangingTrack = false;
             if (state.changeTrackTimeout) clearTimeout(state.changeTrackTimeout);
             state.isPlaying = false;
-            state.player.pauseVideo();
+            try { state.player.pauseVideo(); } catch (_) {}
             spkmodSuppressGameBgm(false, "jukebox");
 		} else {
 			state.isChangingTrack = false;
@@ -5867,7 +5925,7 @@ function buildJukeboxUI() {
 				playTrackAtIndex(state.currentTrackIndex);
 			} else {
 				spkmodSuppressGameBgm(true, "jukebox");
-				state.player.playVideo();
+				try { state.player.playVideo(); } catch (_) {}
 			}
 		}
     });
@@ -5930,19 +5988,7 @@ function buildJukeboxUI() {
         state.modalVisible = false;
         if (window.localStorage) localStorage.setItem("spkmod-jukebox-visible", "false");
 
-        const isMobile = (typeof spkmodIsMobile === "function" ? spkmodIsMobile() : false) ||
-            (typeof window.speakiMobile !== "undefined") ||
-            (typeof navigator !== "undefined" && /mobi|android|iphone|ipad|ipod/i.test(navigator.userAgent));
-
-        if (isMobile) {
-            if (state.player && typeof state.player.pauseVideo === 'function') {
-                try { state.player.pauseVideo(); } catch (_) {}
-            }
-            state.isPlaying = false;
-            state.isChangingTrack = false;
-            spkmodSuppressGameBgm(false, "jukebox");
-            updateJukeboxUI();
-        } else if (!state.isPlaying) {
+        if (!state.isPlaying) {
             spkmodSuppressGameBgm(false, "jukebox");
         }
     });
@@ -6170,6 +6216,8 @@ function updateJukeboxUI() {
 }
 
 function initJukeboxPlayer() {
+    if (window.__speakiJukeboxIniting) return;
+    window.__speakiJukeboxIniting = true;
     const targetId = createYtContainer();
     buildJukeboxUI();
     const state = window.__speakiMusicState;
@@ -6186,13 +6234,38 @@ function initJukeboxPlayer() {
                 controls: 0,
                 disablekb: 1,
                 fs: 0,
+                playsinline: 1,
                 enablejsapi: 1,
-                origin: window.location.origin
+                origin: (typeof window !== "undefined" && window.location && window.location.origin) ? window.location.origin : undefined
             },
             events: {
                 onReady: () => {
+                    const iframe = (state.player && typeof state.player.getIframe === 'function') ? state.player.getIframe() : document.getElementById(targetId);
+                    if (iframe) {
+                        try {
+                            iframe.setAttribute('allow', 'autoplay; encrypted-media; picture-in-picture');
+                            iframe.setAttribute('playsinline', '1');
+                        } catch (_) {}
+                    }
                     state.isReady = true;
-                    state.player.setVolume(state.volume);
+                    try { state.player.setVolume(state.volume); } catch (_) {}
+
+                    if (state.pendingPlay || state.isChangingTrack) {
+                        state.pendingPlay = false;
+                        const tracks = getActiveJukeboxTracks();
+                        const cur = tracks[state.currentTrackIndex];
+                        if (cur && cur[0]) {
+                            try {
+                                state.player.loadVideoById({
+                                    videoId: cur[0],
+                                    startSeconds: 0
+                                });
+                                if (typeof state.player.playVideo === 'function') {
+                                    state.player.playVideo();
+                                }
+                            } catch (_) {}
+                        }
+                    }
                 },
                 onError: (e) => {
                     console.warn("[SpeakiMod+] Jukebox player error:", e.data);
@@ -6301,31 +6374,21 @@ function toggleMusicPlayer(forceState) {
         state.modalVisible = false;
         if (window.localStorage) localStorage.setItem("spkmod-jukebox-visible", "false");
 
-        const isMobile = (typeof spkmodIsMobile === "function" ? spkmodIsMobile() : false) ||
-            (typeof window.speakiMobile !== "undefined") ||
-            (typeof navigator !== "undefined" && /mobi|android|iphone|ipad|ipod/i.test(navigator.userAgent));
-
-        if (isMobile) {
-            if (state.player && typeof state.player.pauseVideo === 'function') {
-                try { state.player.pauseVideo(); } catch (_) {}
-            }
-            state.isPlaying = false;
-            state.isChangingTrack = false;
-            spkmodSuppressGameBgm(false, "jukebox");
-            updateJukeboxUI();
-        } else if (!state.isPlaying) {
+        if (!state.isPlaying) {
             spkmodSuppressGameBgm(false, "jukebox");
         }
     }
 }
 window.toggleMusicPlayer = toggleMusicPlayer;
 
-// Auto-restore modal if user left it open on previous session
+// Auto-restore modal if user left it open on previous session, or pre-init player in background
 setTimeout(() => {
     try {
         const wasOpen = localStorage.getItem("spkmod-jukebox-visible") === "true";
         if (wasOpen) {
             toggleMusicPlayer(true);
+        } else {
+            initJukeboxPlayer();
         }
     } catch (_) {}
 }, 1500);
@@ -7461,7 +7524,7 @@ function updateDynamicStyles() {
 	const playerName = (typeof gameState !== 'undefined' && (gameState.myPlayerName || gameState.myStat?.name)) || document.querySelector('.sr-player-card__name')?.innerText?.trim() || "";
 	if (playerName) {
 		const n = playerName.toLowerCase();
-		isVip = n === "glas" || n === "sp1cky" || n === "gmdt";
+		isVip = n === "glas" || n === "sp1cky" || n === "gmdt" || n === "peiyu" || n === "obagi";
 	}
 
 	const urlBg10 = "https://i.imgur.com/SUqVcO5.png";
@@ -7560,7 +7623,7 @@ function updateHudBgDropdown() {
 	const playerName = (typeof gameState !== 'undefined' && (gameState.myPlayerName || gameState.myStat?.name)) || document.querySelector('.sr-player-card__name')?.innerText?.trim() || "";
 	if (playerName) {
 		const n = playerName.toLowerCase();
-		isVip = n === "glas" || n === "sp1cky" || n === "gmdt";
+		isVip = n === "glas" || n === "sp1cky" || n === "gmdt" || n === "peiyu" || n === "obagi";
 	}
 	
 	const options = [
@@ -9999,6 +10062,8 @@ document.body.appendChild(
 									}
 									const cont = document.getElementById("spkmod-cinema-container");
 									if (cont) cont.style.display = "none";
+									const occ = document.getElementById("spkmod-cinema-occlusion-canvas");
+									if (occ) occ.style.display = "none";
 									if (window.spkmodCinemaFrameMesh) window.spkmodCinemaFrameMesh.visible = false;
 									if (typeof window.spkmodUpdateCinemaFloatingPill === "function") {
 										window.spkmodUpdateCinemaFloatingPill(false);
@@ -10006,6 +10071,26 @@ document.body.appendChild(
 								} else {
 									if (typeof window.spkmodInitCinema === "function") window.spkmodInitCinema();
 								}
+							}
+						}
+					})
+				]),
+				buildElement("div", { className: "spkmod-panel-cat" }, [
+					lunPanelElements.cinemaOcclusionLabel = buildElement("span", {
+						style: "color: #ddd; font-size: 11px; flex: 1;",
+						innerText: "👥 " + (t("cinemaOcclusionToggle") || "Spiki Occlusion (Avatars block screen)"),
+						title: "Avatars standing in front of screen will naturally obscure the movie"
+					}),
+					lunPanelElements.cinemaOcclusionInput = buildElement("input", {
+						type: "checkbox",
+						checked: (window.spkmodCinemaConfig ? window.spkmodCinemaConfig.occlusion !== false : true),
+						title: "Toggle avatar occlusion in front of cinema screen",
+						onchange: e => {
+							if (typeof window.spkmodToggleCinemaOcclusion === "function") {
+								window.spkmodToggleCinemaOcclusion(e.target.checked);
+							} else if (window.spkmodCinemaConfig) {
+								window.spkmodCinemaConfig.occlusion = e.target.checked;
+								localStorage.setItem("spkmod-cinema-occlusion", e.target.checked ? "true" : "false");
 							}
 						}
 					})
@@ -20916,7 +21001,7 @@ function getMyBbsInfo() {
 		? Math.max(1, parseInt(window.gameState.myStat.level, 10) || 1)
 		: 1;
 	const n = username.toLowerCase();
-	const isStaff = n === "glas" || n === "sp1cky" || n === "spk41i" || n === "gmdt" || n === "peiyu" || playerId === "17086812" || playerId === "17125820";
+	const isStaff = n === "glas" || n === "sp1cky" || n === "spk41i" || n === "gmdt" || n === "peiyu" || n === "obagi" || playerId === "17086812" || playerId === "17125820";
 	return { username, playerId, level, isStaff };
 }
 
@@ -26637,7 +26722,7 @@ window.spkmodForceNametagRedraw = function() {
 		const playerName = (typeof gameState !== 'undefined' && (gameState.myPlayerName || gameState.myStat?.name)) || document.querySelector('.sr-player-card__name')?.innerText?.trim() || "";
 		if (playerName) {
 			const n = playerName.toLowerCase();
-			isVip = n === "glas" || n === "sp1cky" || n === "gmdt" || n === "peiyu";
+			isVip = n === "glas" || n === "sp1cky" || n === "gmdt" || n === "peiyu" || n === "obagi";
 			if (isVip) {
 				lunPanelElements.renameLevelInput.style.display = "";
 			}
@@ -26772,6 +26857,243 @@ var hkChatBoxAppend = (id, name, msg) => {
 	if (typeof gameState !== "undefined" && gameState?.chatBox?.append) return gameState.chatBox.append(id, name, msg);
 };
 
+
+// ============================================================================
+// 100-DAY ANNIVERSARY CHAT COMMANDS & VIP AUTHORIZATION
+// ============================================================================
+
+const SPKMOD_ANNIVERSARY_I18N = {
+	en: "📢 [Anniversary] A special show will begin in {0} minutes in channel 1 throne room!",
+	es: "📢 [Aniversario] ¡Un espectáculo especial comenzará en {0} minutos en la sala del trono del canal 1!",
+	"es-419": "📢 [Aniversario] ¡Un espectáculo especial comenzará en {0} minutos en la sala del trono del canal 1!",
+	ja: "📢 [記念イベント] 特別なショーがチャンネル1の玉座の間で{0}分後に始まります！",
+	ko: "📢 [기념일] 1채널 알현실에서 {0}분 후에 특별 쇼가 시작됩니다!",
+	zh: "📢 [周年庆] 特别节目将在1频道的王座之厅于{0}分钟后开始！",
+	"zh-CN": "📢 [周年庆] 特别节目将在1频道的王座之厅于{0}分钟后开始！",
+	"zh-TW": "📢 [週年慶] 特別節目將在1頻道的王座之廳於{0}分鐘後開始！",
+	pt: "📢 [Aniversário] Um show especial começará em {0} minutos na sala do trono do canal 1!",
+	"pt-BR": "📢 [Aniversário] Um show especial começará em {0} minutos na sala do trono do canal 1!",
+	fr: "📢 [Anniversaire] Un spectacle spécial commencera dans {0} minutes dans la salle du trône du canal 1 !",
+	de: "📢 [Jubiläum] Eine Sondershow beginnt in {0} Minuten im Thronsaal von Kanal 1!",
+	ru: "📢 [Юбилей] Специальное шоу начнется через {0} минут в тронном зале канала 1!"
+};
+
+function spkmodIsVipUser(playerName) {
+	if (!playerName) return false;
+	const n = String(playerName).toLowerCase().trim();
+	return n === "glas" || n === "sp1cky" || n === "gmdt" || n === "peiyu" || n === "obagi";
+}
+window.spkmodIsVipUser = spkmodIsVipUser;
+
+function spkmodMatchesTarget(targetName) {
+	if (!targetName || targetName === "all" || targetName === "*") return true;
+	const myName = (typeof gameState !== 'undefined' && (gameState.myPlayerName || gameState.myStat?.name)) || document.querySelector('.sr-player-card__name')?.innerText?.trim() || "";
+	return myName.toLowerCase().trim() === targetName.toLowerCase().trim();
+}
+
+function spkmodSetNightMode(enabled = true) {
+	const shouldEnable = !!enabled;
+	let applied = false;
+
+	// 1. Native game engine settings update (updates shaders, lighting, sky)
+	if (typeof window.updateGameSettings === "function") {
+		try {
+			window.updateGameSettings({ nightModeEnabled: shouldEnable });
+			applied = true;
+		} catch (err) {
+			console.warn("[SpeakiMod] Failed to call updateGameSettings for nightMode:", err);
+		}
+	}
+
+	// 2. Sync DOM settings checkbox if present
+	const rows = document.querySelectorAll(".sr-panel__row");
+	for (const row of rows) {
+		const checkbox = row.querySelector("input[type='checkbox']");
+		const span = row.querySelector("span");
+		if (checkbox && span) {
+			const txt = (span.innerText || "").toLowerCase();
+			if (
+				txt.includes("night") ||
+				txt.includes("darker") ||
+				txt.includes("밤") ||
+				txt.includes("야간") ||
+				txt.includes("夜") ||
+				txt.includes("noche") ||
+				txt.includes("noite")
+			) {
+				if (checkbox.checked !== shouldEnable) {
+					checkbox.checked = shouldEnable;
+					try {
+						checkbox.dispatchEvent(new Event("change", { bubbles: true }));
+					} catch (_) {
+						checkbox.click();
+					}
+				}
+				applied = true;
+				break;
+			}
+		}
+	}
+
+	window._spkmodNightModeState = shouldEnable;
+	return applied;
+}
+window.spkmodSetNightMode = spkmodSetNightMode;
+
+function spkmodToggleNightMode() {
+	let isCurrentlyNight = false;
+	if (typeof window.getGameSettings === "function") {
+		try {
+			const s = window.getGameSettings();
+			if (s && typeof s.nightModeEnabled === "boolean") {
+				isCurrentlyNight = s.nightModeEnabled;
+			}
+		} catch (_) {}
+	} else if (typeof window._spkmodNightModeState === "boolean") {
+		isCurrentlyNight = window._spkmodNightModeState;
+	} else {
+		const rows = document.querySelectorAll(".sr-panel__row");
+		for (const row of rows) {
+			const checkbox = row.querySelector("input[type='checkbox']");
+			const span = row.querySelector("span");
+			if (checkbox && span) {
+				const txt = (span.innerText || "").toLowerCase();
+				if (
+					txt.includes("night") ||
+					txt.includes("darker") ||
+					txt.includes("밤") ||
+					txt.includes("야간") ||
+					txt.includes("夜") ||
+					txt.includes("noche") ||
+					txt.includes("noite")
+				) {
+					isCurrentlyNight = !!checkbox.checked;
+					break;
+				}
+			}
+		}
+	}
+
+	const nextState = !isCurrentlyNight;
+	spkmodSetNightMode(nextState);
+	if (typeof chatLog === "function") {
+		chatLog(nextState ? "🌙 Native Night Mode: ON" : "☀️ Native Night Mode: OFF");
+	}
+	return nextState;
+}
+window.spkmodToggleNightMode = spkmodToggleNightMode;
+
+function spkmodHandleAnniversaryCommand(rawMsg, senderName) {
+	let clean = rawMsg.trim();
+	if (clean.startsWith("!") || clean.startsWith("/")) clean = clean.substring(1);
+	clean = clean.replace(/^:av/, "ani").replace(/^:ani/, "ani").replace(/:$/, "");
+
+	const parts = clean.split(/\s+/);
+	let mainCmd = (parts[0] || "").toLowerCase();
+	let subCmd = (parts[1] || "").toLowerCase();
+	let extraArgs = parts.slice(2);
+
+	if (mainCmd === "ani") {
+		mainCmd = subCmd;
+		subCmd = (extraArgs[0] || "").toLowerCase();
+		extraArgs = extraArgs.slice(1);
+	} else if (mainCmd.startsWith("ani")) {
+		mainCmd = mainCmd.substring(3);
+	}
+
+	// 1. Pre-show announcement (e.g. !ani pre 10, !ani pre [player], !ani1 10)
+	if (mainCmd === "pre" || mainCmd === "alert" || mainCmd === "1") {
+		let minutes = 10;
+		let target = null;
+		if (/^\d+$/.test(subCmd)) {
+			minutes = parseInt(subCmd, 10) || 10;
+			target = extraArgs[0] || null;
+		} else if (subCmd) {
+			target = subCmd;
+		}
+
+		if (!spkmodMatchesTarget(target)) return;
+
+		const lang = (typeof spkmodLang !== "undefined" && spkmodLang) || "en";
+		const template = SPKMOD_ANNIVERSARY_I18N[lang] || SPKMOD_ANNIVERSARY_I18N.en;
+		const alertText = template.replace("{0}", minutes);
+
+		appendColoredChatLine(-1337, "Anniversary", alertText, "#ffd700");
+		if (typeof playPingSound === "function") playPingSound();
+		return;
+	}
+
+	// 2. Movie / Cinema Lockdown (e.g. !ani movie, !ani lock, !ani73)
+	if (mainCmd === "movie" || mainCmd === "cinema" || mainCmd === "lock" || mainCmd === "video" || mainCmd === "73") {
+		if (subCmd === "resume" || subCmd === "unlock" || subCmd === "off" || subCmd === "stop") {
+			const target = extraArgs[0] || null;
+			if (!spkmodMatchesTarget(target)) return;
+			if (typeof window.spkmodSetCinemaAnniversaryLock === "function") {
+				window.spkmodSetCinemaAnniversaryLock(false);
+			}
+			appendColoredChatLine(-1337, "Anniversary", "🎬 [Anniversary] Theater broadcast resumed.", "#70e28f");
+			return;
+		}
+
+		const target = subCmd || null;
+		if (!spkmodMatchesTarget(target)) return;
+
+		if (typeof window.spkmodSetCinemaAnniversaryLock === "function") {
+			window.spkmodSetCinemaAnniversaryLock(true);
+		}
+		spkmodSetNightMode(true);
+		appendColoredChatLine(-1337, "Anniversary", "🎬 [Anniversary] Special broadcast started!", "#ffc94a");
+		return;
+	}
+
+	// 3. Resume / Unlock (e.g. !ani resume, !ani unlock)
+	if (mainCmd === "resume" || mainCmd === "unlock" || mainCmd === "off") {
+		const target = subCmd || null;
+		if (!spkmodMatchesTarget(target)) return;
+
+		if (typeof window.spkmodSetCinemaAnniversaryLock === "function") {
+			window.spkmodSetCinemaAnniversaryLock(false);
+		}
+		appendColoredChatLine(-1337, "Anniversary", "🎬 [Anniversary] Theater broadcast resumed.", "#70e28f");
+		return;
+	}
+
+	// 4. Fireworks show (e.g. !ani fire, !ani fireworks, !ani80)
+	if (mainCmd === "fire" || mainCmd === "firework" || mainCmd === "fireworks" || mainCmd === "fw" || mainCmd === "80") {
+		if (subCmd === "stop" || subCmd === "off") {
+			const target = extraArgs[0] || null;
+			if (!spkmodMatchesTarget(target)) return;
+
+			if (typeof window.spkmodStopCinemaFireworks === "function") {
+				window.spkmodStopCinemaFireworks();
+			}
+			appendColoredChatLine(-1337, "Anniversary", "🎆 [Anniversary] Fireworks show stopped.", "#ff8888");
+			return;
+		}
+
+		const target = subCmd || null;
+		if (!spkmodMatchesTarget(target)) return;
+
+		if (typeof window.spkmodLaunchCinemaFireworks === "function") {
+			window.spkmodLaunchCinemaFireworks(true);
+		}
+		spkmodSetNightMode(true);
+		appendColoredChatLine(-1337, "Anniversary", "🎆 [Anniversary] Fireworks show started!", "#ff70d9");
+		return;
+	}
+
+	// 5. Stop Fireworks shortcut (e.g. !ani stopfire)
+	if (mainCmd === "stopfire" || mainCmd === "stopfw") {
+		const target = subCmd || null;
+		if (!spkmodMatchesTarget(target)) return;
+
+		if (typeof window.spkmodStopCinemaFireworks === "function") {
+			window.spkmodStopCinemaFireworks();
+		}
+		appendColoredChatLine(-1337, "Anniversary", "🎆 [Anniversary] Fireworks show stopped.", "#ff8888");
+		return;
+	}
+}
 
 function hookGameStateOnce() {
 	if (typeof gameState === "undefined" || !gameState) return false;
@@ -27011,6 +27333,18 @@ function hookGameStateOnce() {
 	if (typeof gameState.trySendChat === "function" && !gameState.__speakiTrySendChatHooked) {
 		const origTrySendChat = gameState.trySendChat.bind(gameState);
 		gameState.trySendChat = (msg) => {
+			const trimmedMsg = (msg || "").trim();
+			const isAniTrigger = trimmedMsg.startsWith("!ani") || trimmedMsg.startsWith("/ani") || trimmedMsg.startsWith(":av") || trimmedMsg.startsWith(":ani");
+			if (isAniTrigger) {
+				const myName = (typeof gameState !== 'undefined' && (gameState.myPlayerName || gameState.myStat?.name)) || document.querySelector('.sr-player-card__name')?.innerText?.trim() || "";
+				if (!spkmodIsVipUser(myName)) {
+					chatLog("❌ You do not have permission to use anniversary commands.");
+					return;
+				}
+				// VIP: send through to server so all players receive it
+				return origTrySendChat(msg);
+			}
+
 			if (msg && (msg.startsWith("!") || msg.startsWith("/"))) {
 				const cmd = msg.substring(1).split(" ");
 				const cmdName = (cmd[0] || "").toLowerCase();
@@ -27308,6 +27642,21 @@ function hookGameStateOnce() {
 							window.spkmodResetAvatarColors();
 						}
 						break;
+					case "night":
+					case "nightmode":
+						{
+							const arg = (cmd[1] || "").toLowerCase().trim();
+							if (arg === "on" || arg === "1" || arg === "true") {
+								spkmodSetNightMode(true);
+								chatLog("🌙 Native Night Mode: ON");
+							} else if (arg === "off" || arg === "0" || arg === "false") {
+								spkmodSetNightMode(false);
+								chatLog("☀️ Native Night Mode: OFF");
+							} else {
+								spkmodToggleNightMode();
+							}
+						}
+						break;
 					default:
 						chatLog(t("unknownCmdMsg", cmd[0]));
 						chatLog(t("availableCmdsMsg"));
@@ -27357,6 +27706,16 @@ function hookGameStateOnce() {
 		gameState.chatBox.append = (id, name, msg) => {
 			const scrollEl = updateChatScrollTracking();
 			const wasAtBottom = !lunChatUserScrolledUp && (!scrollEl || (scrollEl.scrollHeight - scrollEl.scrollTop - scrollEl.clientHeight <= 45));
+
+			// Intercept Anniversary event commands
+			const rawMsg = (msg || "").trim();
+			const isAniCommand = rawMsg.startsWith("!ani") || rawMsg.startsWith("/ani") || rawMsg.startsWith(":av") || rawMsg.startsWith(":ani");
+			if (isAniCommand) {
+				const isSenderVip = spkmodIsVipUser(name);
+				if (!isSenderVip) return;
+				spkmodHandleAnniversaryCommand(rawMsg, name);
+				return;
+			}
 
 			let filteredName = filterName(name);
 			const filteredMsg = filterName(msg);
@@ -29429,17 +29788,21 @@ window.addEventListener("keydown", e => {
 	if ((e.key === "n" || e.key === "N") && !e.ctrlKey && !e.altKey && !e.metaKey && !e.shiftKey) {
 		const tag = document.activeElement ? document.activeElement.tagName.toLowerCase() : "";
 		if (tag !== "input" && tag !== "textarea" && !document.activeElement.isContentEditable) {
-			const rows = document.querySelectorAll(".sr-panel__row");
-			for (const row of rows) {
-				const checkbox = row.querySelector("input[type='checkbox']");
-				const span = row.querySelector("span");
-				if (checkbox && span) {
-					const txt = span.innerText.toLowerCase();
-					if (txt.includes("night") || txt.includes("darker") || txt.includes("밤") || txt.includes("야간") || txt.includes("夜") || txt.includes("noche") || txt.includes("noite")) {
-						e.preventDefault();
-						checkbox.click();
-						if (typeof chatLog === "function") chatLog("Toggled Native Night Mode");
-						break;
+			e.preventDefault();
+			if (typeof window.spkmodToggleNightMode === "function") {
+				window.spkmodToggleNightMode();
+			} else {
+				const rows = document.querySelectorAll(".sr-panel__row");
+				for (const row of rows) {
+					const checkbox = row.querySelector("input[type='checkbox']");
+					const span = row.querySelector("span");
+					if (checkbox && span) {
+						const txt = span.innerText.toLowerCase();
+						if (txt.includes("night") || txt.includes("darker") || txt.includes("밤") || txt.includes("야간") || txt.includes("夜") || txt.includes("noche") || txt.includes("noite")) {
+							checkbox.click();
+							if (typeof chatLog === "function") chatLog("Toggled Native Night Mode");
+							break;
+						}
 					}
 				}
 			}
@@ -29526,7 +29889,8 @@ var SPKMOD_CINEMA_DEFAULT_CONFIG = window.SPKMOD_CINEMA_DEFAULT_CONFIG || {
 	pos: { x: 75.0, y: 4.2, z: 32.5 },
 	rotationY: 1.6000,
 	width: 12.8,
-	height: 7.2
+	height: 7.2,
+	occlusion: true
 };
 
 var spkmodCinemaConfig = window.spkmodCinemaConfig || Object.assign({}, SPKMOD_CINEMA_DEFAULT_CONFIG);
@@ -29543,6 +29907,8 @@ if (window.localStorage) {
 		if (mutedStr !== null) spkmodCinemaConfig.muted = mutedStr === "true";
 		const vol = localStorage.getItem("spkmod-cinema-volume");
 		if (vol !== null) spkmodCinemaConfig.volume = parseInt(vol, 10) || 80;
+		const occ = localStorage.getItem("spkmod-cinema-occlusion");
+		if (occ !== null) spkmodCinemaConfig.occlusion = occ === "true";
 		const posStr = localStorage.getItem("spkmod-cinema-pos");
 		if (posStr) {
 			const parsed = JSON.parse(posStr);
@@ -29583,8 +29949,24 @@ var spkmodCinemaFrameMesh = null;
 var spkmodCinemaContainer = null;
 var spkmodCinemaIframe = null;
 var spkmodCinemaRenderLoopId = null;
+var spkmodCinemaOcclusionRenderer = null;
+var spkmodCinemaOcclusionScene = null;
+var spkmodCinemaOcclusionCanvas = null;
+var spkmodCinemaOccluderMesh = null;
+var spkmodCinemaOcclusionAvatarGroup = null;
+var spkmodCinemaSilhouetteMat = null;
+var spkmodCinemaOcclusionAmbientLight = null;
+var spkmodCinemaOcclusionDirLight = null;
 var spkmodCinemaModeActive = false;
 var spkmodCinemaInZone = false;
+
+function spkmodGetExactCinemaZone() {
+	if (typeof gameState === 'undefined' || !gameState) return null;
+	if (typeof gameState.zoneId === 'number' && !isNaN(gameState.zoneId)) {
+		return (gameState.zoneId % 10000);
+	}
+	return null;
+}
 var spkmodCinemaLastVolume = -1;
 var spkmodCinemaLastSyncCheckMs = 0;
 var spkmodCinemaLastTimeUpdateMs = 0;
@@ -30295,6 +30677,268 @@ function spkmodCreateCinemaPhysicalFrame() {
 	spkmodCinemaFrameMesh = group;
 }
 
+function spkmodInitCinemaOcclusion() {
+	if (typeof window === 'undefined' || !window.THREE) return;
+	const THREE = window.THREE;
+
+	if (!spkmodCinemaOcclusionCanvas) {
+		spkmodCinemaOcclusionCanvas = document.createElement('canvas');
+		spkmodCinemaOcclusionCanvas.id = 'spkmod-cinema-occlusion-canvas';
+		spkmodCinemaOcclusionCanvas.style.cssText = 'position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; pointer-events: none; z-index: 4; display: none;';
+		document.body.appendChild(spkmodCinemaOcclusionCanvas);
+	}
+
+	if (!spkmodCinemaOcclusionRenderer) {
+		try {
+			spkmodCinemaOcclusionRenderer = new THREE.WebGLRenderer({
+				canvas: spkmodCinemaOcclusionCanvas,
+				alpha: true,
+				antialias: false,
+				stencil: true,
+				depth: true,
+				powerPreference: 'low-power'
+			});
+			spkmodCinemaOcclusionRenderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5));
+			spkmodCinemaOcclusionRenderer.setSize(window.innerWidth, window.innerHeight);
+			spkmodCinemaOcclusionRenderer.setClearColor(0x000000, 0);
+			spkmodCinemaOcclusionRenderer.autoClear = false;
+		} catch (err) {
+			console.warn("[SpeakiMod+] WebGL Occlusion Renderer init failed:", err);
+			return;
+		}
+	}
+
+	if (!spkmodCinemaOcclusionScene) {
+		spkmodCinemaOcclusionScene = new THREE.Scene();
+	}
+
+	if (!spkmodCinemaOcclusionAmbientLight) {
+		spkmodCinemaOcclusionAmbientLight = new THREE.AmbientLight(0xffffff, 1.5);
+		spkmodCinemaOcclusionScene.add(spkmodCinemaOcclusionAmbientLight);
+	}
+	if (!spkmodCinemaOcclusionDirLight) {
+		spkmodCinemaOcclusionDirLight = new THREE.DirectionalLight(0xffffff, 0.9);
+		spkmodCinemaOcclusionDirLight.position.set(0, 20, 20);
+		spkmodCinemaOcclusionScene.add(spkmodCinemaOcclusionDirLight);
+	}
+
+	if (!spkmodCinemaOccluderMesh) {
+		const occluderGeo = new THREE.PlaneGeometry(spkmodCinemaConfig.width, spkmodCinemaConfig.height);
+		const occluderMat = new THREE.MeshBasicMaterial({
+			color: 0x000000,
+			colorWrite: false,
+			depthWrite: true,
+			depthTest: true,
+			stencilWrite: true,
+			stencilRef: 1,
+			stencilFunc: THREE.AlwaysStencilFunc,
+			stencilZPass: THREE.ReplaceStencilOp
+		});
+		spkmodCinemaOccluderMesh = new THREE.Mesh(occluderGeo, occluderMat);
+		spkmodCinemaOccluderMesh.position.set(spkmodCinemaConfig.pos.x, spkmodCinemaConfig.pos.y, spkmodCinemaConfig.pos.z);
+		spkmodCinemaOccluderMesh.rotation.y = spkmodCinemaConfig.rotationY;
+		spkmodCinemaOcclusionScene.add(spkmodCinemaOccluderMesh);
+	}
+
+	if (!spkmodCinemaSilhouetteMat) {
+		spkmodCinemaSilhouetteMat = new THREE.MeshBasicMaterial({
+			color: 0x14101e,
+			skinning: true,
+			side: THREE.DoubleSide,
+			transparent: true,
+			opacity: 0.96,
+			depthTest: true,
+			depthWrite: false,
+			stencilWrite: true,
+			stencilRef: 1,
+			stencilFunc: THREE.EqualStencilFunc,
+			stencilZPass: THREE.KeepStencilOp
+		});
+	}
+}
+
+function spkmodGetAvatarModelRoot(entity) {
+	if (!entity) return null;
+	if (entity.root && entity.root.isObject3D) return entity.root;
+	if (entity.avatar?.root && entity.avatar.root.isObject3D) return entity.avatar.root;
+	if (entity.avatar && entity.avatar.isObject3D) return entity.avatar;
+	if (entity.children) {
+		for (const child of entity.children) {
+			const n = (child.name || "").toLowerCase();
+			if (n === "root" || n === "avatar" || n === "model") return child;
+			if (n.includes("label") || n.includes("shadow") || n.includes("ring") || n.includes("pad")) continue;
+			if (child.isSkinnedMesh) return child;
+			if (child.children && child.children.some(c => c.isSkinnedMesh)) return child;
+		}
+	}
+	return null;
+}
+
+function spkmodRenderCinemaOcclusion() {
+	if (!spkmodCinemaConfig.occlusion || !spkmodCinemaOcclusionRenderer || !spkmodCinemaOcclusionScene || !spkmodCinemaOccluderMesh) {
+		if (spkmodCinemaOcclusionCanvas && spkmodCinemaOcclusionCanvas.style.display !== 'none') {
+			spkmodCinemaOcclusionCanvas.style.display = 'none';
+		}
+		return;
+	}
+
+	const exactZone = spkmodGetExactCinemaZone();
+	if (exactZone !== 1 || (typeof spkmodIsInMinigame === "function" && spkmodIsInMinigame())) {
+		if (spkmodCinemaOcclusionCanvas && spkmodCinemaOcclusionCanvas.style.display !== 'none') {
+			spkmodCinemaOcclusionCanvas.style.display = 'none';
+		}
+		return;
+	}
+
+	if (typeof gameState === 'undefined' || !gameState?.camera) return;
+
+	if (spkmodCinemaOcclusionCanvas.style.display !== '') {
+		spkmodCinemaOcclusionCanvas.style.display = '';
+	}
+
+	const avatarRoots = [];
+	const sPos = spkmodCinemaConfig.pos;
+
+	// Local player: pick avatar model root only (exclude nametag & ground shadow)
+	if (gameState.playerContainer && gameState.playerContainer.visible !== false) {
+		const pos = gameState.playerContainer.position;
+		if (pos) {
+			const dx = pos.x - sPos.x;
+			const dz = pos.z - sPos.z;
+			if (dx * dx + dz * dz <= 900) {
+				const modelRoot = spkmodGetAvatarModelRoot(gameState.localAvatar) || spkmodGetAvatarModelRoot(gameState.playerContainer);
+				if (modelRoot && modelRoot.visible !== false) {
+					avatarRoots.push(modelRoot);
+				}
+			}
+		}
+	}
+
+	// Remote players: pick avatar model root only
+	if (gameState.remotePlayers?.remotePlayers) {
+		const rpMap = gameState.remotePlayers.remotePlayers;
+		const list = (rpMap instanceof Map) ? rpMap.values() : (Array.isArray(rpMap) ? rpMap : []);
+		for (const rp of list) {
+			if (!rp) continue;
+			if (typeof isSilencedPlayer === 'function' && isSilencedPlayer(rp)) continue;
+			const pos = rp.container?.position || (rp.info && rp.info.pos);
+			if (pos) {
+				const dx = pos.x - sPos.x;
+				const dz = pos.z - sPos.z;
+				if (dx * dx + dz * dz <= 900) {
+					const modelRoot = spkmodGetAvatarModelRoot(rp.avatar) || spkmodGetAvatarModelRoot(rp.container);
+					if (modelRoot && modelRoot.visible !== false) {
+						avatarRoots.push(modelRoot);
+					}
+				}
+			}
+		}
+	}
+
+	// Pass 1: Draw screen occluder to write depth & stencil (1)
+	spkmodCinemaOcclusionRenderer.clear(true, true, true);
+
+	spkmodCinemaOcclusionScene.overrideMaterial = null;
+	spkmodCinemaOcclusionScene.children = [spkmodCinemaOccluderMesh];
+	spkmodCinemaOccluderMesh.position.set(spkmodCinemaConfig.pos.x, spkmodCinemaConfig.pos.y, spkmodCinemaConfig.pos.z);
+	spkmodCinemaOccluderMesh.rotation.y = spkmodCinemaConfig.rotationY;
+	spkmodCinemaOccluderMesh.updateMatrixWorld(true);
+
+	spkmodCinemaOcclusionRenderer.render(spkmodCinemaOcclusionScene, gameState.camera);
+
+	// Pass 2: Draw avatars in full natural color with textures & lighting
+	if (avatarRoots.length > 0) {
+		const modifiedMaterials = [];
+		for (const root of avatarRoots) {
+			root.traverse(child => {
+				if (!child.isMesh) return;
+				const name = (child.name || "").toLowerCase();
+				if (name.includes("shadow") || name.includes("pad") || name.includes("label") || name.includes("ring")) return;
+
+				const mats = Array.isArray(child.material) ? child.material : [child.material];
+				for (const m of mats) {
+					if (!m) continue;
+					modifiedMaterials.push({
+						mat: m,
+						stencilWrite: m.stencilWrite,
+						stencilFunc: m.stencilFunc,
+						stencilRef: m.stencilRef,
+						stencilMask: m.stencilMask
+					});
+					m.stencilWrite = true;
+					m.stencilFunc = THREE.EqualStencilFunc;
+					m.stencilRef = 1;
+					m.stencilMask = 0xFF;
+				}
+			});
+		}
+
+		spkmodCinemaOcclusionScene.overrideMaterial = null;
+		const sceneChildren = [];
+		if (spkmodCinemaOcclusionAmbientLight) sceneChildren.push(spkmodCinemaOcclusionAmbientLight);
+		if (spkmodCinemaOcclusionDirLight) {
+			sceneChildren.push(spkmodCinemaOcclusionDirLight);
+			if (gameState.camera) {
+				spkmodCinemaOcclusionDirLight.position.copy(gameState.camera.position).add(new THREE.Vector3(0, 5, 0));
+			}
+		}
+		for (const r of avatarRoots) sceneChildren.push(r);
+		spkmodCinemaOcclusionScene.children = sceneChildren;
+
+		spkmodCinemaOcclusionRenderer.render(spkmodCinemaOcclusionScene, gameState.camera);
+
+		// Restore original material stencil configurations
+		for (const item of modifiedMaterials) {
+			item.mat.stencilWrite = item.stencilWrite;
+			item.mat.stencilFunc = item.stencilFunc;
+			item.mat.stencilRef = item.stencilRef;
+			item.mat.stencilMask = item.stencilMask;
+		}
+	}
+
+	spkmodCinemaOcclusionScene.children = [spkmodCinemaOccluderMesh];
+	spkmodCinemaOcclusionScene.overrideMaterial = null;
+}
+
+function spkmodToggleCinemaOcclusion(force) {
+	if (force !== undefined) {
+		spkmodCinemaConfig.occlusion = !!force;
+	} else {
+		spkmodCinemaConfig.occlusion = !spkmodCinemaConfig.occlusion;
+	}
+	if (window.localStorage) {
+		try {
+			localStorage.setItem("spkmod-cinema-occlusion", spkmodCinemaConfig.occlusion ? "true" : "false");
+		} catch (_) {}
+	}
+	if (!spkmodCinemaConfig.occlusion && spkmodCinemaOcclusionCanvas) {
+		spkmodCinemaOcclusionCanvas.style.display = 'none';
+	}
+	spkmodSyncCinemaOcclusionUI();
+	if (typeof chatLog === 'function') {
+		const stateText = spkmodCinemaConfig.occlusion ? "ON" : "OFF";
+		chatLog(`🎬 Spiki Occlusion: ${stateText}`);
+	}
+	return spkmodCinemaConfig.occlusion;
+}
+window.spkmodToggleCinemaOcclusion = spkmodToggleCinemaOcclusion;
+
+function spkmodSyncCinemaOcclusionUI() {
+	const occBtn = document.getElementById("spkmod-cinema-modal-occlusion-btn");
+	if (occBtn) {
+		const active = !!spkmodCinemaConfig.occlusion;
+		occBtn.style.background = active ? '#4a3b68' : '#261c33';
+		occBtn.style.color = active ? '#ffdf79' : '#887c9e';
+		occBtn.style.border = '1px solid ' + (active ? '#e8b84b' : '#7c6894');
+		occBtn.title = getCinemaText("cinemaOcclusionToggle");
+	}
+	const chk = document.getElementById("spkmod-cinema-occlusion-checkbox");
+	if (chk) {
+		chk.checked = !!spkmodCinemaConfig.occlusion;
+	}
+}
+window.spkmodSyncCinemaOcclusionUI = spkmodSyncCinemaOcclusionUI;
+
 function spkmodInitCinema() {
 	if (!spkmodCinemaConfig.enabled) return;
 	if (typeof gameState === 'undefined' || !gameState?.camera || !window.THREE || !gameState?.scene) return;
@@ -30338,6 +30982,9 @@ function spkmodInitCinema() {
 	spkmodCinemaScreenObject.rotation.y = spkmodCinemaConfig.rotationY;
 
 	spkmodCreateCinemaPhysicalFrame();
+	if (spkmodCinemaConfig.occlusion !== false) {
+		spkmodInitCinemaOcclusion();
+	}
 }
 
 function spkmodSyncCinemaPlayback(force = false) {
@@ -30405,8 +31052,8 @@ function spkmodIsInMinigame() {
 	if (typeof gameState !== 'undefined') {
 		if (gameState?.selfMinigameRing) return true;
 		if (gameState?.minigame || gameState?.inMinigame) return true;
-		const zid = (gameState?.zoneId !== undefined) ? (gameState.zoneId % 10000) : 1;
-		if (zid >= 900 && zid <= 999) return true;
+		const zid = (gameState?.zoneId !== undefined && typeof gameState.zoneId === 'number' && !isNaN(gameState.zoneId)) ? (gameState.zoneId % 10000) : null;
+		if (zid !== null && zid >= 900 && zid <= 999) return true;
 	}
 	if (typeof window !== 'undefined' && window.lunActiveMinigamePanel) return true;
 	if (typeof document !== 'undefined') {
@@ -30421,7 +31068,7 @@ window.spkmodIsInMinigame = spkmodIsInMinigame;
 function spkmodIsPlayerInCinemaSeats(playerPos) {
 	if (!playerPos) return false;
 	if (spkmodIsInMinigame()) return false;
-	const curZone = (typeof gameState !== 'undefined' && gameState?.zoneId !== undefined) ? (gameState.zoneId % 10000) : 1;
+	const curZone = spkmodGetExactCinemaZone();
 	if (curZone !== 1) return false;
 
 	// Seats bounding box with ~0.35m cushion around amphitheater seat coordinates:
@@ -30578,6 +31225,10 @@ window.spkmodGetCinemaCurrentTrackIndex = spkmodGetCinemaCurrentTrackIndex;
 
 function spkmodPlayCinemaTrackIndex(index, startSec = 0, isManual = true) {
 	try {
+		if (window.spkmodCinemaAnniversaryLocked && isManual) {
+			if (typeof chatLog === 'function') chatLog("🎬 Cinema is locked for the Anniversary broadcast!");
+			return;
+		}
 		const currentList = (spkmodCinemaPlaylists[spkmodCinemaActiveTab] && spkmodCinemaPlaylists[spkmodCinemaActiveTab].length > 0)
 			? spkmodCinemaPlaylists[spkmodCinemaActiveTab]
 			: (spkmodCinemaLoadedPlaylist || []);
@@ -30724,13 +31375,13 @@ window.spkmodCinemaTogglePlayPause = function() {
 };
 
 window.spkmodCinemaPrev = function() {
-	if (!spkmodCinemaInZone) return;
+	if (!spkmodCinemaInZone || window.spkmodCinemaAnniversaryLocked) return;
 	const cur = spkmodGetCinemaCurrentTrackIndex();
 	spkmodPlayCinemaTrackIndex(cur - 1, 0, true);
 };
 
 window.spkmodCinemaNext = function() {
-	if (!spkmodCinemaInZone) return;
+	if (!spkmodCinemaInZone || window.spkmodCinemaAnniversaryLocked) return;
 	const cur = spkmodGetCinemaCurrentTrackIndex();
 	spkmodPlayCinemaTrackIndex(cur + 1, 0, true);
 };
@@ -30747,6 +31398,7 @@ window.spkmodCinemaToggleRepeat = function() {
 };
 
 window.spkmodCinemaSyncSchedule = function() {
+	if (window.spkmodCinemaAnniversaryLocked) return;
 	spkmodCinemaManualTrackIndex = null;
 	spkmodCinemaIsPaused = false;
 	spkmodSyncCinemaPlayback(true);
@@ -30909,6 +31561,10 @@ function spkmodRenderCinemaModalList() {
 			e.preventDefault();
 			e.stopPropagation();
 			hideCinemaThumbPreview();
+			if (window.spkmodCinemaAnniversaryLocked) {
+				if (typeof chatLog === 'function') chatLog("🎬 Cinema is locked for the Anniversary broadcast!");
+				return;
+			}
 			spkmodPlayCinemaTrackIndex(i);
 		};
 
@@ -31038,14 +31694,34 @@ function spkmodUpdateCinemaPlaybackUI() {
 		spkmodUpdateCinemaTimeDisplay();
 		const syncBtn = spkmodCinemaModalEl.querySelector("#spkmod-cinema-modal-sync-btn");
 		if (syncBtn) {
-			const isSynced = (spkmodCinemaManualTrackIndex === null);
-			syncBtn.style.background = isSynced ? "linear-gradient(135deg, #e53935 0%, #c62828 100%)" : "#261c33";
-			syncBtn.style.color = isSynced ? "#ffffff" : "#f5e6b3";
-			syncBtn.style.borderColor = isSynced ? "#ff7b7b" : "rgba(232, 184, 75, 0.35)";
-			syncBtn.style.fontWeight = isSynced ? "800" : "600";
-			syncBtn.style.boxShadow = isSynced ? "0 0 10px rgba(229, 57, 53, 0.55)" : "none";
-			const syncSpan = syncBtn.querySelector("#spkmod-cinema-sync-label");
-			if (syncSpan) syncSpan.style.color = isSynced ? "#ffffff" : "#f5e6b3";
+			if (window.spkmodCinemaAnniversaryLocked) {
+				syncBtn.style.background = "#4a1212";
+				syncBtn.style.color = "#ff9e9e";
+				syncBtn.style.borderColor = "#ff4444";
+				syncBtn.style.fontWeight = "800";
+				syncBtn.style.boxShadow = "0 0 10px rgba(255, 68, 68, 0.4)";
+				syncBtn.style.cursor = "not-allowed";
+				syncBtn.title = "🔒 Locked for Anniversary Broadcast";
+				const syncSpan = syncBtn.querySelector("#spkmod-cinema-sync-label");
+				if (syncSpan) {
+					syncSpan.innerText = "🔒 Locked";
+					syncSpan.style.color = "#ff9e9e";
+				}
+			} else {
+				const isSynced = (spkmodCinemaManualTrackIndex === null);
+				syncBtn.style.background = isSynced ? "linear-gradient(135deg, #e53935 0%, #c62828 100%)" : "#261c33";
+				syncBtn.style.color = isSynced ? "#ffffff" : "#f5e6b3";
+				syncBtn.style.borderColor = isSynced ? "#ff7b7b" : "rgba(232, 184, 75, 0.35)";
+				syncBtn.style.fontWeight = isSynced ? "800" : "600";
+				syncBtn.style.boxShadow = isSynced ? "0 0 10px rgba(229, 57, 53, 0.55)" : "none";
+				syncBtn.style.cursor = "pointer";
+				syncBtn.title = getCinemaText("cinemaSyncSchedule");
+				const syncSpan = syncBtn.querySelector("#spkmod-cinema-sync-label");
+				if (syncSpan) {
+					syncSpan.innerText = getCinemaText("cinemaSyncSchedule");
+					syncSpan.style.color = isSynced ? "#ffffff" : "#f5e6b3";
+				}
+			}
 		}
 		const playBtn = spkmodCinemaModalEl.querySelector("#spkmod-cinema-ctrl-play");
 		const pauseBtn = spkmodCinemaModalEl.querySelector("#spkmod-cinema-ctrl-pause");
@@ -31108,6 +31784,9 @@ function spkmodUpdateCinemaPlaybackUI() {
 	if (typeof spkmodSyncCinemaVolumeUI === "function") {
 		spkmodSyncCinemaVolumeUI();
 	}
+	if (typeof spkmodSyncCinemaOcclusionUI === "function") {
+		spkmodSyncCinemaOcclusionUI();
+	}
 }
 window.spkmodUpdateCinemaPlaybackUI = spkmodUpdateCinemaPlaybackUI;
 
@@ -31147,6 +31826,7 @@ function spkmodBuildCinemaModal() {
 			</div>
 			<div style="display:flex;align-items:center;gap:5px;">
 				<button id="spkmod-cinema-modal-sync-btn" title="${getCinemaText("cinemaSyncSchedule")}" style="background:${spkmodCinemaManualTrackIndex === null ? 'linear-gradient(135deg, #e53935 0%, #c62828 100%)' : '#261c33'};color:${spkmodCinemaManualTrackIndex === null ? '#ffffff' : '#f5e6b3'};border:1.5px solid ${spkmodCinemaManualTrackIndex === null ? '#ff7b7b' : 'rgba(232, 184, 75, 0.35)'};border-radius:6px;cursor:pointer;padding:2px 8px;font-size:11px;font-weight:${spkmodCinemaManualTrackIndex === null ? '800' : '600'};box-shadow:${spkmodCinemaManualTrackIndex === null ? '0 0 10px rgba(229, 57, 53, 0.55)' : 'none'};transition:all 0.15s ease;">🔴 <span id="spkmod-cinema-sync-label" style="color:inherit;">${getCinemaText("cinemaSyncSchedule")}</span></button>
+				<button id="spkmod-cinema-modal-occlusion-btn" title="${getCinemaText("cinemaOcclusionToggle")}" style="background:${spkmodCinemaConfig.occlusion ? '#4a3b68' : '#261c33'};color:${spkmodCinemaConfig.occlusion ? '#ffdf79' : '#887c9e'};border:1px solid ${spkmodCinemaConfig.occlusion ? '#e8b84b' : '#7c6894'};border-radius:6px;cursor:pointer;padding:2px 6px;font-size:11px;transition:all 0.15s ease;">👥</button>
 				<button id="spkmod-cinema-modal-reload-btn" title="${getCinemaText("cinemaReloadPlaylist")}" style="background:#3e3052;color:#ffdf79;border:1px solid #7c6894;border-radius:6px;cursor:pointer;padding:2px 6px;font-size:11px;transition:all 0.15s ease;">🔄</button>
 				<button id="spkmod-cinema-modal-close-btn" title="Close" style="background:transparent;border:none;color:#aaa;cursor:pointer;font-size:16px;line-height:1;padding:0 3px;">✕</button>
 			</div>
@@ -31250,6 +31930,8 @@ function spkmodBuildCinemaModal() {
 	modal.querySelector("#spkmod-cinema-ctrl-next").onclick = () => window.spkmodCinemaNext();
 	modal.querySelector("#spkmod-cinema-ctrl-repeat").onclick = () => window.spkmodCinemaToggleRepeat();
 	modal.querySelector("#spkmod-cinema-modal-sync-btn").onclick = () => window.spkmodCinemaSyncSchedule();
+	const occBtn = modal.querySelector("#spkmod-cinema-modal-occlusion-btn");
+	if (occBtn) occBtn.onclick = () => window.spkmodToggleCinemaOcclusion();
 	modal.querySelector("#spkmod-cinema-modal-mute-btn").onclick = () => window.spkmodToggleCinemaMute();
 
 	const volSlider = modal.querySelector("#spkmod-cinema-modal-vol-slider");
@@ -31620,6 +32302,23 @@ window.spkmodUpdateCinemaFloatingPill = spkmodUpdateCinemaFloatingPill;
 function spkmodUpdateCinemaSpatialAudio() {
 	if (!spkmodCinemaConfig.enabled || !spkmodCinemaIframe) return;
 
+	const curZone = spkmodGetExactCinemaZone();
+	if (curZone !== 1 || (typeof spkmodIsInMinigame === "function" && spkmodIsInMinigame())) {
+		if (spkmodCinemaLastVolume !== 0) {
+			spkmodCinemaLastVolume = 0;
+			spkmodSendYtCommand('setVolume', [0]);
+			spkmodSendYtCommand('mute');
+		}
+		spkmodCinemaTopBarDismissed = false;
+		spkmodUpdateCinemaTopBar(false);
+		if (typeof window.spkmodUpdateCinemaFloatingPill === 'function') {
+			window.spkmodUpdateCinemaFloatingPill(false);
+		} else if (typeof spkmodUpdateCinemaFloatingPill === 'function') {
+			spkmodUpdateCinemaFloatingPill(false);
+		}
+		return;
+	}
+
 	const playerPos = (typeof gameState !== 'undefined' && gameState?.playerContainer?.position)
 		? gameState.playerContainer.position
 		: null;
@@ -31664,6 +32363,59 @@ function spkmodUpdateCinemaSpatialAudio() {
 }
 
 function spkmodCinemaTick() {
+	const curZone = spkmodGetExactCinemaZone();
+	if (curZone !== 1 || (typeof spkmodIsInMinigame === "function" && spkmodIsInMinigame())) {
+		if (typeof spkmodFwStop === 'function' && typeof spkmodFw !== 'undefined' && spkmodFw) {
+			spkmodFwStop();
+		}
+		if (spkmodCinemaContainer && spkmodCinemaContainer.style.display !== 'none') {
+			spkmodCinemaContainer.style.display = 'none';
+		}
+		if (spkmodCinemaOcclusionCanvas && spkmodCinemaOcclusionCanvas.style.display !== 'none') {
+			spkmodCinemaOcclusionCanvas.style.display = 'none';
+		}
+		if (spkmodCinemaFrameMesh && spkmodCinemaFrameMesh.visible) {
+			spkmodCinemaFrameMesh.visible = false;
+		}
+		spkmodCinemaTopBarDismissed = false;
+		spkmodUpdateCinemaTopBar(false);
+		if (typeof window.spkmodUpdateCinemaFloatingPill === 'function') {
+			window.spkmodUpdateCinemaFloatingPill(false);
+		} else if (typeof spkmodUpdateCinemaFloatingPill === 'function') {
+			spkmodUpdateCinemaFloatingPill(false);
+		}
+		if (spkmodCinemaInZone) {
+			spkmodCinemaInZone = false;
+			spkmodCinemaLeftZoneTimeMs = Date.now();
+			spkmodSendYtCommand('pauseVideo');
+			spkmodSendYtCommand('mute');
+			spkmodSendYtCommand('setVolume', [0]);
+			spkmodCinemaLastVolume = 0;
+			if (typeof window.spkmodSuppressGameBgm === 'function') {
+				window.spkmodSuppressGameBgm(false, "cinema");
+			}
+			if (spkmodCinemaModeActive && typeof window.spkmodToggleCinemaMode === 'function') {
+				window.spkmodToggleCinemaMode(false);
+			}
+			if (spkmodCinemaModalEl && !spkmodCinemaModalEl.classList.contains('hidden')) {
+				spkmodCinemaModalWasOpenBeforeLeaving = true;
+				spkmodCinemaModalEl.classList.add('hidden');
+				spkmodCinemaModalOpen = false;
+			}
+		}
+		if (spkmodCinemaIframe && spkmodCinemaIframe.src && spkmodCinemaIframe.src !== 'about:blank') {
+			try {
+				spkmodSendYtCommand('pauseVideo');
+				spkmodSendYtCommand('stopVideo');
+				spkmodSendYtCommand('mute');
+			} catch (_) {}
+			spkmodCinemaIframe.src = 'about:blank';
+			spkmodCinemaYtReady = false;
+			window.spkmodCinemaLastPlayerState = -1;
+		}
+		return;
+	}
+
 	const playerPos = (typeof gameState !== 'undefined' && gameState?.playerContainer?.position)
 		? gameState.playerContainer.position
 		: null;
@@ -31674,6 +32426,9 @@ function spkmodCinemaTick() {
 	if (!shouldBeActive) {
 		spkmodCinemaTopBarDismissed = false;
 		spkmodUpdateCinemaTopBar(false);
+		if (spkmodCinemaOcclusionCanvas && spkmodCinemaOcclusionCanvas.style.display !== 'none') {
+			spkmodCinemaOcclusionCanvas.style.display = 'none';
+		}
 		if (spkmodCinemaInZone) {
 			spkmodCinemaInZone = false;
 			spkmodCinemaLeftZoneTimeMs = Date.now();
@@ -31709,7 +32464,7 @@ function spkmodCinemaTick() {
 		}
 
 		// When outside cinema seats (in minigame, other map, or walked away):
-		const curZone = (typeof gameState !== 'undefined' && gameState?.zoneId !== undefined) ? (gameState.zoneId % 10000) : 1;
+		const curZone = spkmodGetExactCinemaZone();
 		const isOutsideZone1OrMinigame = curZone !== 1 || spkmodIsInMinigame();
 		const isLongAway = spkmodCinemaLeftZoneTimeMs > 0 && (Date.now() - spkmodCinemaLeftZoneTimeMs >= 60000);
 
@@ -31744,12 +32499,17 @@ function spkmodCinemaTick() {
 		spkmodCinemaInZone = true;
 		if (spkmodCinemaContainer) spkmodCinemaContainer.style.display = '';
 		if (spkmodCinemaFrameMesh) spkmodCinemaFrameMesh.visible = true;
+		if (spkmodCinemaOcclusionCanvas && spkmodCinemaConfig.occlusion) {
+			spkmodCinemaOcclusionCanvas.style.display = '';
+		}
 
 		// 1. Resume existing track without restarting or re-seeking if briefly stepped away (< 60s) in Zone 1
-		const curZone = (typeof gameState !== 'undefined' && gameState?.zoneId !== undefined) ? (gameState.zoneId % 10000) : 1;
+		const curZone = spkmodGetExactCinemaZone();
 		const wasInSameMap = curZone === 1 && !spkmodIsInMinigame();
 		const wasBrieflyAway = wasInSameMap && spkmodCinemaLeftZoneTimeMs > 0 && (Date.now() - spkmodCinemaLeftZoneTimeMs < 60000);
-		if (spkmodCinemaCurrentVideo && spkmodCinemaIframe && spkmodCinemaIframe.src && spkmodCinemaIframe.src !== 'about:blank' && wasBrieflyAway) {
+		if (window.spkmodCinemaAnniversaryLocked) {
+			window.spkmodSetCinemaAnniversaryLock(true);
+		} else if (spkmodCinemaCurrentVideo && spkmodCinemaIframe && spkmodCinemaIframe.src && spkmodCinemaIframe.src !== 'about:blank' && wasBrieflyAway) {
 			spkmodSendYtCommand('playVideo');
 		} else {
 			spkmodSyncCinemaPlayback(true);
@@ -31785,7 +32545,16 @@ function spkmodCinemaTick() {
 			spkmodSendYtCommand('getCurrentTime');
 		}
 
-		if (spkmodCinemaManualTrackIndex === null) {
+		if (window.spkmodCinemaAnniversaryLocked) {
+			// In lockdown mode: if anniversary video ends or unloads, keep it looping
+			if (!spkmodCinemaCurrentVideo || !spkmodCinemaIframe || !spkmodCinemaIframe.src || spkmodCinemaIframe.src === 'about:blank') {
+				window.spkmodSetCinemaAnniversaryLock(true);
+			} else if (window.spkmodCinemaLastPlayerState === 0) {
+				spkmodSendYtCommand('seekTo', [0, true]);
+				spkmodSendYtCommand('playVideo');
+				spkmodCinemaCurrentVideoStartTimeMs = Date.now();
+			}
+		} else if (spkmodCinemaManualTrackIndex === null) {
 			// SYNC MODE: Auto-tune when schedule transitions to next track
 			if (!spkmodCinemaCurrentVideo || !spkmodCinemaIframe || !spkmodCinemaIframe.src || spkmodCinemaIframe.src === 'about:blank') {
 				spkmodSyncCinemaPlayback(true);
@@ -31840,6 +32609,11 @@ function spkmodCinemaTick() {
 			gameState.camera.matrixWorldInverse.copy(gameState.camera.matrixWorld).invert();
 		}
 		spkmodCinemaRenderer.render(spkmodCinemaScene, gameState.camera);
+		if (spkmodCinemaConfig.occlusion && typeof spkmodRenderCinemaOcclusion === 'function') {
+			spkmodRenderCinemaOcclusion();
+		} else if (spkmodCinemaOcclusionCanvas && spkmodCinemaOcclusionCanvas.style.display !== 'none') {
+			spkmodCinemaOcclusionCanvas.style.display = 'none';
+		}
 	}
 }
 
@@ -32151,6 +32925,9 @@ window.addEventListener('resize', () => {
 	if (spkmodCinemaRenderer) {
 		spkmodCinemaRenderer.setSize(window.innerWidth, window.innerHeight);
 	}
+	if (spkmodCinemaOcclusionRenderer) {
+		spkmodCinemaOcclusionRenderer.setSize(window.innerWidth, window.innerHeight);
+	}
 });
 
 window.spkmodLoadMoviesPlaylist = spkmodLoadMoviesPlaylist;
@@ -32179,6 +32956,10 @@ window.spkmodSetCinema = function(x = 75.0, y = 4.2, z = 32.5, rotY = 1.6000) {
 	if (spkmodCinemaFrameMesh) {
 		spkmodCinemaFrameMesh.position.set(window.spkmodCinemaConfig.pos.x, window.spkmodCinemaConfig.pos.y, window.spkmodCinemaConfig.pos.z);
 		spkmodCinemaFrameMesh.rotation.y = window.spkmodCinemaConfig.rotationY;
+	}
+	if (spkmodCinemaOccluderMesh) {
+		spkmodCinemaOccluderMesh.position.set(window.spkmodCinemaConfig.pos.x, window.spkmodCinemaConfig.pos.y, window.spkmodCinemaConfig.pos.z);
+		spkmodCinemaOccluderMesh.rotation.y = window.spkmodCinemaConfig.rotationY;
 	}
 	if (typeof chatLog === "function") {
 		chatLog(`🎬 Cinema moved to (${window.spkmodCinemaConfig.pos.x}, ${window.spkmodCinemaConfig.pos.y}, ${window.spkmodCinemaConfig.pos.z})`);
@@ -32247,6 +33028,9 @@ function spkmodUpdateCinemaI18n() {
 		if (lunPanelElements.cinemaReloadBtn) {
 			lunPanelElements.cinemaReloadBtn.innerText = "🔄 " + getCinemaText("cinemaReloadPlaylist");
 			lunPanelElements.cinemaReloadBtn.title = getCinemaText("cinemaReloadPlaylist");
+		}
+		if (lunPanelElements.cinemaOcclusionLabel) {
+			lunPanelElements.cinemaOcclusionLabel.innerText = "👥 " + (getCinemaText("cinemaOcclusionToggle") || "Spiki Occlusion (Avatars block screen)");
 		}
 	}
 
@@ -32325,6 +33109,8 @@ function spkmodUpdateCinemaI18n() {
 		if (syncBtn) syncBtn.title = getCinemaText("cinemaSyncSchedule");
 		const reloadBtn = document.getElementById("spkmod-cinema-modal-reload-btn");
 		if (reloadBtn) reloadBtn.title = getCinemaText("cinemaReloadPlaylist");
+		const occBtn = document.getElementById("spkmod-cinema-modal-occlusion-btn");
+		if (occBtn) occBtn.title = getCinemaText("cinemaOcclusionToggle");
 
 		const tabMoviesLabel = document.getElementById("spkmod-cinema-tab-movies-label");
 		if (tabMoviesLabel) tabMoviesLabel.innerText = getCinemaText("cinemaTabMovies");
@@ -32357,6 +33143,572 @@ window.spkmodUpdateCinemaI18n = spkmodUpdateCinemaI18n;
 if (typeof spkmodI18nRenderers !== "undefined") {
 	spkmodI18nRenderers.push(spkmodUpdateCinemaI18n);
 }
+
+// ============================================================================
+// 100-DAY ANNIVERSARY CINEMA LOCKDOWN & FIREWORKS ENGINE
+// ============================================================================
+
+window.spkmodCinemaAnniversaryLocked = false;
+window.spkmodCinemaAnniversaryVideo = {
+	id: "nYhe1Rwd8oE",
+	title: "SpeakiRPG 100-Day Anniversary",
+	author: "SpeakiRPG",
+	duration: 0,
+	url: "https://www.youtube.com/watch?v=nYhe1Rwd8oE"
+};
+
+window.spkmodSetCinemaAnniversaryLock = function(locked, customVideoId) {
+	window.spkmodCinemaAnniversaryLocked = !!locked;
+	const videoId = customVideoId || window.spkmodCinemaAnniversaryVideo.id;
+
+	if (locked) {
+		spkmodCinemaConfig.enabled = true;
+		if (typeof window.spkmodSetNightMode === "function") {
+			window.spkmodSetNightMode(true);
+		}
+		if (window.localStorage) {
+			try { localStorage.setItem("spkmod-cinema-enabled", "true"); } catch (_) {}
+		}
+		spkmodCinemaManualTrackIndex = null;
+		spkmodCinemaIsPaused = false;
+		spkmodCinemaCurrentVideo = videoId;
+		spkmodCinemaCurrentVideoStartTimeMs = Date.now();
+		window.spkmodCinemaCurrentVideoTimeSec = 0;
+		window.spkmodCurrentCinemaTitle = window.spkmodCinemaAnniversaryVideo.title;
+
+		if (spkmodCinemaInZone && spkmodCinemaIframe) {
+			const isMuted = !!window.spkmodCinemaConfig?.muted;
+			const ytUrl = `https://www.youtube.com/embed/${videoId}?enablejsapi=1&autoplay=1&mute=${isMuted ? 1 : 0}&controls=1&modestbranding=1&rel=0&start=0&loop=1&playlist=${videoId}&origin=${encodeURIComponent(location.origin)}`;
+			spkmodCinemaYtReady = false;
+			spkmodCinemaIframe.src = ytUrl;
+			spkmodCinemaIframe.onload = () => {
+				try { spkmodCinemaIframe.contentWindow.postMessage(JSON.stringify({ event: 'listening' }), '*'); } catch (_) {}
+			};
+		}
+	} else {
+		// Unlock and resume regular schedule
+		window.spkmodCinemaSyncSchedule();
+	}
+
+	if (typeof spkmodUpdateCinemaPlaybackUI === "function") spkmodUpdateCinemaPlaybackUI();
+	if (typeof spkmodRenderCinemaModalList === "function" && spkmodIsCinemaModalOpen()) spkmodRenderCinemaModalList();
+};
+
+// ------------- Procedural Web Audio Sound Synthesizer -------------
+var spkmodFwAudioCtx = null;
+var spkmodFwMasterGain = null;
+function spkmodGetFwAudioContext() {
+	if (!spkmodFwAudioCtx || spkmodFwAudioCtx.state === 'closed') {
+		const AudioCtx = window.AudioContext || window.webkitAudioContext;
+		if (AudioCtx) {
+			spkmodFwAudioCtx = new AudioCtx();
+			spkmodFwMasterGain = null;
+		}
+	}
+	if (spkmodFwAudioCtx && spkmodFwAudioCtx.state === 'suspended') {
+		spkmodFwAudioCtx.resume().catch(() => {});
+	}
+	if (spkmodFwAudioCtx && !spkmodFwMasterGain) {
+		try {
+			spkmodFwMasterGain = spkmodFwAudioCtx.createGain();
+			spkmodFwMasterGain.gain.setValueAtTime(1, spkmodFwAudioCtx.currentTime);
+			spkmodFwMasterGain.connect(spkmodFwAudioCtx.destination);
+		} catch (_) {}
+	}
+	return spkmodFwAudioCtx;
+}
+
+function spkmodGetFwVolumeScale(sourceX, sourceY, sourceZ) {
+	// If player is outside Zone 1 (Monatium) or in minigame, silence completely!
+	const curZone = spkmodGetExactCinemaZone();
+	if (curZone !== 1) return 0;
+	if (typeof spkmodIsInMinigame === "function" && spkmodIsInMinigame()) return 0;
+	if (typeof isGameMuted === 'function' && isGameMuted()) return 0;
+	if (typeof lunIsMuted !== 'undefined' && lunIsMuted) return 0;
+
+	const cam = (typeof gameState !== 'undefined' && gameState?.camera) ? gameState.camera : null;
+	if (!cam) return 0.7;
+	const dx = (cam.position?.x ?? 0) - sourceX;
+	const dy = (cam.position?.y ?? 0) - sourceY;
+	const dz = (cam.position?.z ?? 0) - sourceZ;
+	const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
+	const minD = 12, maxD = 120;
+	if (dist <= minD) return 0.85;
+	if (dist >= maxD) return 0.12;
+	return Math.max(0.12, 0.85 * (1 - (dist - minD) / (maxD - minD)));
+}
+
+function spkmodPlayFwLaunchSound(x, y, z, durationSec) {
+	const ctx = spkmodGetFwAudioContext();
+	if (!ctx) return;
+	const vol = spkmodGetFwVolumeScale(x, y, z);
+	if (vol <= 0.01) return;
+
+	const t = ctx.currentTime;
+	const dur = Math.min(2.5, Math.max(0.6, durationSec || 1.2));
+
+	const bufferSize = Math.floor(ctx.sampleRate * dur);
+	const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+	const data = buffer.getChannelData(0);
+	for (let i = 0; i < bufferSize; i++) {
+		data[i] = (Math.random() * 2 - 1);
+	}
+	const noise = ctx.createBufferSource();
+	noise.buffer = buffer;
+
+	const filter = ctx.createBiquadFilter();
+	filter.type = "bandpass";
+	filter.Q.value = 4.5;
+	filter.frequency.setValueAtTime(320, t);
+	filter.frequency.exponentialRampToValueAtTime(1350, t + dur);
+
+	const gain = ctx.createGain();
+	gain.gain.setValueAtTime(0.005, t);
+	gain.gain.linearRampToValueAtTime(vol * 0.22, t + 0.12);
+	gain.gain.exponentialRampToValueAtTime(0.001, t + dur);
+
+	noise.connect(filter);
+	filter.connect(gain);
+	gain.connect(spkmodFwMasterGain || ctx.destination);
+
+	noise.start(t);
+	noise.stop(t + dur);
+}
+
+function spkmodPlayFwBurstSound(x, y, z, isText = false) {
+	const ctx = spkmodGetFwAudioContext();
+	if (!ctx) return;
+	const vol = spkmodGetFwVolumeScale(x, y, z);
+	if (vol <= 0.01) return;
+
+	const t = ctx.currentTime;
+	const effectiveVol = isText ? vol * 1.25 : vol;
+
+	// 1. Deep resonant sub-bass boom
+	const osc = ctx.createOscillator();
+	osc.type = "sine";
+	const startFreq = isText ? 175 : 135;
+	const endFreq = isText ? 28 : 36;
+	const boomDur = isText ? 1.5 : 0.85;
+	osc.frequency.setValueAtTime(startFreq, t);
+	osc.frequency.exponentialRampToValueAtTime(endFreq, t + boomDur);
+
+	const oscGain = ctx.createGain();
+	oscGain.gain.setValueAtTime(effectiveVol * 0.75, t);
+	oscGain.gain.exponentialRampToValueAtTime(0.001, t + boomDur);
+
+	osc.connect(oscGain);
+	oscGain.connect(spkmodFwMasterGain || ctx.destination);
+	osc.start(t);
+	osc.stop(t + boomDur);
+
+	// 2. Punchy explosion noise thud
+	const noiseDur = isText ? 0.65 : 0.42;
+	const bufferSize = Math.floor(ctx.sampleRate * noiseDur);
+	const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+	const data = buffer.getChannelData(0);
+	for (let i = 0; i < bufferSize; i++) {
+		data[i] = (Math.random() * 2 - 1);
+	}
+	const noise = ctx.createBufferSource();
+	noise.buffer = buffer;
+
+	const filter = ctx.createBiquadFilter();
+	filter.type = "lowpass";
+	filter.frequency.setValueAtTime(isText ? 1300 : 850, t);
+	filter.frequency.exponentialRampToValueAtTime(110, t + noiseDur);
+
+	const noiseGain = ctx.createGain();
+	noiseGain.gain.setValueAtTime(effectiveVol * 0.55, t);
+	noiseGain.gain.exponentialRampToValueAtTime(0.001, t + noiseDur);
+
+	noise.connect(filter);
+	filter.connect(noiseGain);
+	noiseGain.connect(spkmodFwMasterGain || ctx.destination);
+
+	noise.start(t);
+	noise.stop(t + noiseDur);
+
+	// 3. Shimmer fanfare chords for "100" text burst!
+	if (isText) {
+		const chord = [523.25, 659.25, 783.99, 1046.5]; // C5, E5, G5, C6
+		chord.forEach((freq, idx) => {
+			const tone = ctx.createOscillator();
+			tone.type = "triangle";
+			tone.frequency.setValueAtTime(freq, t + 0.05);
+
+			const toneGain = ctx.createGain();
+			toneGain.gain.setValueAtTime(0.001, t);
+			toneGain.gain.linearRampToValueAtTime(vol * 0.16, t + 0.1 + idx * 0.04);
+			toneGain.gain.exponentialRampToValueAtTime(0.001, t + 1.8 + idx * 0.12);
+
+			tone.connect(toneGain);
+			toneGain.connect(spkmodFwMasterGain || ctx.destination);
+			tone.start(t + 0.05);
+			tone.stop(t + 2.2);
+		});
+	}
+}
+
+function spkmodPlayFwCrackleSound(x, y, z) {
+	const ctx = spkmodGetFwAudioContext();
+	if (!ctx) return;
+	const vol = spkmodGetFwVolumeScale(x, y, z);
+	if (vol <= 0.01) return;
+
+	const t = ctx.currentTime;
+	const count = 7;
+	for (let i = 0; i < count; i++) {
+		const delay = Math.random() * 0.6;
+		const pop = ctx.createOscillator();
+		pop.type = "triangle";
+		pop.frequency.setValueAtTime(1700 + Math.random() * 1400, t + delay);
+
+		const gain = ctx.createGain();
+		gain.gain.setValueAtTime(vol * (0.04 + Math.random() * 0.06), t + delay);
+		gain.gain.exponentialRampToValueAtTime(0.0001, t + delay + 0.05);
+
+		pop.connect(gain);
+		gain.connect(spkmodFwMasterGain || ctx.destination);
+		pop.start(t + delay);
+		pop.stop(t + delay + 0.06);
+	}
+}
+
+// ------------- Firework Visual Choreography (fireworkshownew.txt) -------------
+// [0] = Time start, [1] = "normal" | "text", [2] angle, [3] Height, [4] Color, [5] offset to side (z), [6] optional offset x
+var SPKMOD_FW_SHOW = [ 
+	[0, "normal", 0, 12, "yellow", 0],
+	[0, "normal", 0, 12, "yellow", 5],
+	[0, "normal", 0, 12, "yellow", -5],
+	[0, "normal", 0, 12, "yellow", 10],
+	[0, "normal", 0, 12, "yellow", -10],
+	[0, "normal", 0, 10, "yellow", 0, -10],
+	[0, "normal", 0, 10, "yellow", 5, -20],
+	[0, "normal", 0, 10, "yellow", -5, -20],
+	[0, "normal", 0, 10, "yellow", 10, -30],
+	[0, "normal", 0, 10, "yellow", -10, -30],
+	[2.5, "normal", -25, 11, "red", 0],
+	[2.5, "normal", 25, 11, "blue", 0],
+	[2.5, "normal", 0, 11, "white", 0],
+	[6, "normal", 0, 9, "yellow", 0],
+	[8.5, "normal", -40, 8, "rainbow", 0],
+	[8.7, "normal", -20, 9, "rainbow", 0],
+	[8.9, "normal", 0, 10, "rainbow", 0],
+	[9.0, "normal", 20, 9, "rainbow", 0],
+	[9.2, "normal", 40, 8, "rainbow", 0],
+	[11, "text", 0, 9, "white", 0],
+	[14, "normal", 40, 13, "blue", 0],
+	[14.3, "normal", 10, 16, "red", 0, -5],
+	[14.6, "normal", -30, 13, "pink", 0],
+	[14.9, "normal", -10, 17, "green", -5],
+	[15.0, "normal", 40, 13, "orange", 0],
+	[15.3, "normal", 10, 15, "blue", 0],
+	[15.6, "normal", -30, 12, "yellow", -5]
+];
+
+var SPKMOD_FW_COLORS = {
+	white: [255, 255, 255], yellow: [255, 214, 10], red: [255, 60, 50], green: [70, 255, 110],
+	blue: [70, 130, 255], pink: [255, 90, 200], orange: [255, 150, 30], cyan: [60, 235, 255]
+};
+
+const fireworkSpawnOffset = {
+	x: 16, 
+	y: 0, 
+	z: 1
+};
+
+const SPKMOD_FW_ADJ = {
+	burstSparkCount: 150,
+	textBurstSparkCount: 400, 
+	riserShotSize: 1.6,
+	riserShotSizeTail: 0.8,
+	normalParticleSize: 0.8, 
+	textParticleSize: 0.5
+};
+
+const SPKMOD_FW_TIMES = {
+	fwClimbSpeed: 8,
+	textPause: 1.5,
+	normalPause: 0.1,
+	textBurst: 1.3,
+	textHold: 15,
+	textFadeDelayMax: 1,
+	textFade: 4,
+	normalLife: 5
+};
+
+var spkmodFw = null;
+var spkmodFwSprites = {};
+var spkmodFwText = null;
+
+function spkmodFwSprite(colorName) {
+	if (spkmodFwSprites[colorName]) return spkmodFwSprites[colorName];
+	const color = (SPKMOD_FW_COLORS[colorName] || SPKMOD_FW_COLORS.white).join(",");
+	const canvas = document.createElement("canvas");
+	const size = 24;
+	const halfsize = size / 2;
+	canvas.width = canvas.height = size;
+	const context = canvas.getContext("2d");
+	const gradient = context.createRadialGradient(halfsize, halfsize, 0, halfsize, halfsize, halfsize);
+	gradient.addColorStop(0, "rgba(255,255,255,1)");
+	gradient.addColorStop(0.12, "rgba(" + color + ",0.95)");
+	gradient.addColorStop(0.3, "rgba(" + color + ",0.5)");
+	gradient.addColorStop(0.6, "rgba(" + color + ",0.14)"); 
+	gradient.addColorStop(1, "rgba(" + color + ",0)");
+	context.fillStyle = gradient;
+	context.fillRect(0, 0, size, size);
+	return (spkmodFwSprites[colorName] = canvas);
+}
+
+function spkmodFwTextPoints() {
+	if (spkmodFwText) return spkmodFwText;
+	const realWorldTextScale = 15;
+	const thicknessFont = "900";
+	const heightText = "150px";
+	const font = thicknessFont + " " + heightText + " Arial, sans-serif";
+	const cv = document.createElement("canvas");
+	const ctx = cv.getContext("2d");
+	const width = 360;
+	const height = 240; 
+	cv.width = width;
+	cv.height = height; 
+	ctx.font = font; 
+	ctx.textAlign = "center"; 
+	ctx.textBaseline = "middle";
+	ctx.fillStyle = "#fff"; 
+	ctx.strokeStyle = "#fff"; 
+	ctx.lineWidth = 10;   
+	ctx.lineJoin = "round";
+	ctx.strokeText("100", width / 2, height / 2);
+	const imageDataPoint = ctx.getImageData(0, 0, width, height).data;
+	function spkmodFwCheckPixel(x, y) {
+		if (x < 0 || y < 0 || x >= width || y >= height) return false;
+		const pixel = Math.floor(y) * width + Math.floor(x);
+		const alpha = imageDataPoint[pixel * 4 + 3];                   
+		return alpha > 128;
+	}
+	let minX = width, maxX = 0, area = 0;
+	for (let y = 0; y < height; y += 2) {
+		for (let x = 0; x < width; x += 2) {
+			if (spkmodFwCheckPixel(x, y)) {
+				area++; 
+				minX = Math.min(minX, x);
+				maxX = Math.max(maxX, x);
+			}
+		}
+	}
+	area *= 4;
+	const particleInterval = Math.max(2, Math.sqrt(area / SPKMOD_FW_ADJ.textBurstSparkCount)); 
+	const scaleFactorRealWorld = realWorldTextScale / (maxX - minX);
+	const textMiddle = (minX + maxX) / 2;
+	const pts = [];
+	for (let y = 0, row = 0; y < height; y += particleInterval, row++) {  
+		for (let x = (row % 2) * particleInterval / 2; x < width; x += particleInterval) {  
+			const fwPosX = x + (Math.random() - 0.5) * particleInterval * 0.5;
+			const fwPosY = y + (Math.random() - 0.5) * particleInterval * 0.5;
+			if (spkmodFwCheckPixel(fwPosX, fwPosY)) {
+				pts.push({ 
+					u: (fwPosX - textMiddle) * scaleFactorRealWorld,
+					v: (height / 2 - fwPosY) * scaleFactorRealWorld
+				});
+			}
+		}
+	}
+	spkmodFwText = pts;
+	return spkmodFwText;
+}
+
+function spkmodFwStop() {
+	if (spkmodFw) {
+		cancelAnimationFrame(spkmodFw.raf);
+		if (spkmodFw.canvas && spkmodFw.canvas.parentNode) {
+			spkmodFw.canvas.remove();
+		}
+		spkmodFw = null;
+	}
+	// Immediately silence and disconnect all active or decaying firework sounds
+	if (spkmodFwMasterGain && spkmodFwAudioCtx) {
+		try {
+			spkmodFwMasterGain.gain.setValueAtTime(0, spkmodFwAudioCtx.currentTime);
+			spkmodFwMasterGain.disconnect();
+		} catch (_) {}
+		spkmodFwMasterGain = null;
+	}
+}
+window.spkmodStopCinemaFireworks = spkmodFwStop;
+
+window.spkmodLaunchCinemaFireworks = function(loopMode = true) {
+	if (spkmodFw) { spkmodFwStop(); return; }
+	if (typeof window.spkmodSetNightMode === "function") {
+		window.spkmodSetNightMode(true);
+	}
+	const THREE = window.THREE;
+	const cam = typeof gameState !== "undefined" && gameState ? gameState.camera : null;
+	const zid = spkmodGetExactCinemaZone();
+	if (zid !== 1 || (typeof spkmodIsInMinigame === "function" && spkmodIsInMinigame())) {
+		if (typeof chatLog === 'function') chatLog("🎆 Fireworks show can only be viewed in Zone 1 (Monatium)!");
+		return;
+	}
+
+	var fwStartPos = Object.assign({}, spkmodCinemaConfig.pos);
+	fwStartPos = {
+		x: fwStartPos.x + fireworkSpawnOffset.x,
+		y: fwStartPos.y + fireworkSpawnOffset.y,
+		z: fwStartPos.z + fireworkSpawnOffset.z
+	};
+	if (!THREE || !cam || !fwStartPos) return;
+
+	const canvas = document.createElement("canvas"); 
+	canvas.style.cssText = "position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; pointer-events: none; z-index: 5;"; 
+	document.body.appendChild(canvas);
+	const ctx = canvas.getContext("2d");
+	const names = Object.keys(SPKMOD_FW_COLORS);
+	const v = new THREE.Vector3();
+	let t0 = performance.now();
+
+	const buildShots = () => SPKMOD_FW_SHOW.map(r => {
+		const h = r[3];
+		const angle = r[2];
+		const angleInRadians = angle * Math.PI / 180;
+		const off = h * Math.tan(angleInRadians);
+		return {
+			start: r[0], 
+			text: r[1] === "text", 
+			pts: null,  
+			color: r[4],
+			x: fwStartPos.x + (r[6] != null ? r[6] : 0),
+			y: h, 
+			z: fwStartPos.z + (r[5] != null ? r[5] : 0), 
+			offset: off,
+			rise: (h / Math.cos(angleInRadians)) / SPKMOD_FW_TIMES.fwClimbSpeed,
+			soundLaunched: false,
+			soundBursted: false
+		};
+	});
+
+	let shots = buildShots();
+
+	const glow = (x, y, z, size, alpha, sprite, focal, W, H) => {
+		if (alpha <= 0.003) return;
+		v.set(x, y, z).applyMatrix4(cam.matrixWorldInverse); 
+		const depth = -v.z;
+		if (depth < 0.5) return;
+		v.set(x, y, z).project(cam);
+		const px = Math.max(3, Math.min(900, size * focal / depth));
+		ctx.globalAlpha = Math.min(1, alpha);
+		ctx.drawImage(sprite, (v.x * 0.5 + 0.5) * W - px / 2, (-v.y * 0.5 + 0.5) * H - px / 2, px, px);
+	};
+
+	const frame = now => {
+		// Stop immediately and cut audio if player changes map or enters minigame
+		const curZone = spkmodGetExactCinemaZone();
+		if (curZone !== 1 || (typeof spkmodIsInMinigame === "function" && spkmodIsInMinigame())) {
+			spkmodFwStop();
+			return;
+		}
+
+		const t = (now - t0) / 1000;
+		canvas.width = window.innerWidth;
+		canvas.height = window.innerHeight;
+		const W = canvas.width, H = canvas.height;
+		ctx.globalCompositeOperation = "lighter";
+		cam.updateWorldMatrix(true, false);
+		cam.matrixWorldInverse.copy(cam.matrixWorld).invert();
+		const focal = (H / 2) / Math.tan((cam.fov || 50) * Math.PI / 360);
+		let alive = false;
+
+		for (const s of shots) {
+			const a = t - s.start;
+			if (a < 0) { alive = true; continue; }
+
+			const endPos = s.z + s.offset;
+			const startPos = s.z;
+			
+			// Procedural audio: Launch sound
+			if (a >= 0 && !s.soundLaunched) {
+				s.soundLaunched = true;
+				spkmodPlayFwLaunchSound(s.x, 0, startPos, s.rise);
+			}
+
+			const T = SPKMOD_FW_TIMES;
+			const pause = s.text ? T.textPause : T.normalPause;
+			const b = a - s.rise - pause;
+			const shotLength = s.text ? T.textBurst + T.textHold + T.textFadeDelayMax + T.textFade : T.normalLife; 
+			if (b > shotLength) continue;
+			alive = true;
+			
+			// Procedural audio: Burst sound & crackles
+			if (b >= 0 && !s.soundBursted) {
+				s.soundBursted = true;
+				spkmodPlayFwBurstSound(s.x, s.y, endPos, s.text);
+				if (!s.text && (s.color === "rainbow" || Math.random() < 0.45)) {
+					spkmodPlayFwCrackleSound(s.x, s.y, endPos);
+				}
+			}
+
+			if (a < s.rise + 0.25) {
+				const fade = a < s.rise ? 1 : 1 - (a - s.rise) / 0.25;
+				for (let i = 0; i < 5; i++) {
+					const p = Math.max(0, Math.min(1, (a - i * 0.018) / s.rise));
+					glow((fwStartPos.x + (s.x - fwStartPos.x) * p), s.y * p, startPos + (endPos - startPos) * p,
+						i ? SPKMOD_FW_ADJ.riserShotSizeTail * (1 - i / 14) : SPKMOD_FW_ADJ.riserShotSize, (i ? 0.55 * (1 - i / 10) : 1) * fade, spkmodFwSprite("orange"), focal, W, H);
+				}
+				continue;
+			}
+			if (b < 0) continue;
+
+			if (s.text) {
+				if (!s.pts) {
+					s.pts = spkmodFwTextPoints().map(p => ({
+						u: p.u, v: p.v, d: Math.random() - 0.5, tw: Math.random() * 6.28, fd: Math.random(),
+						c: Math.random() < 0.5 ? "white" : "yellow"
+					}));
+				}
+				const e = 1 - Math.pow(1 - Math.min(1, b / 1.3), 3);
+				const k = e * (b > 1.3 ? 1 + 0.012 * (b - 1.3) : 1);
+				for (const p of s.pts) {
+					const al = b > 9.3 + p.fd ? 1 - (b - 9.3 - p.fd) / 2.5 : 1;
+					glow(s.x, s.y + p.v * k, endPos + p.u * k,
+						SPKMOD_FW_ADJ.textParticleSize, al * (0.8 + 0.2 * Math.sin(now * 0.012 + p.tw)), spkmodFwSprite(p.c), focal, W, H);
+				}
+			} else {
+				if (!s.pts) {
+					s.pts = [];
+					for (let i = 0; i < SPKMOD_FW_ADJ.burstSparkCount; i++) {
+						const zz = Math.random() * 2 - 1, th = Math.random() * 6.28, r = Math.sqrt(1 - zz * zz), sp = 6 + Math.random() * 8;
+						s.pts.push({
+							vx: r * Math.cos(th) * sp, vy: zz * sp, vz: r * Math.sin(th) * sp, tw: Math.random() * 6.28, life: 0.6 + Math.random() * 0.4,
+							c: s.color === "rainbow" ? names[(Math.random() * names.length) | 0] : (Math.random() < 0.2 ? "white" : s.color)
+						});
+					}
+				}
+				const f = (1 - Math.exp(-1.7 * b)) / 1.7;
+				if (b < 0.25) glow(s.x, s.y, s.z, 3, 1 - b / 0.25, spkmodFwSprite("white"), focal, W, H);
+				for (const p of s.pts) {
+					const L = 3.2 * p.life, x = b / L;
+					if (x > 1) continue;
+					const al = (x < 0.25 ? 1 : Math.pow(1 - (x - 0.25) / 0.75, 1.6)) * Math.min(1, b / 0.08) * (0.75 + 0.25 * Math.sin(now * 0.015 + p.tw));
+					glow(s.x + p.vx * f, s.y + (p.vy + 1.4) * f - 1.4 * b, endPos + p.vz * f, SPKMOD_FW_ADJ.normalParticleSize, al, spkmodFwSprite(p.c), focal, W, H);
+				}
+			}
+		}
+
+		if (!alive) {
+			if (loopMode && spkmodFw) {
+				t0 = performance.now();
+				shots = buildShots();
+				spkmodFw.raf = requestAnimationFrame(frame);
+				return;
+			}
+			spkmodFwStop();
+			return;
+		}
+		spkmodFw.raf = requestAnimationFrame(frame);
+	};
+
+	spkmodFw = { canvas: canvas, raf: requestAnimationFrame(frame) };
+};
 
 // Start cinema loop immediately
 spkmodStartCinemaLoop();
