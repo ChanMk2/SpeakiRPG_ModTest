@@ -15500,34 +15500,34 @@ window.__spkmodBasePristineMaterials = window.__spkmodBasePristineMaterials || n
 window.spkmodActiveDyedMaterials = window.spkmodActiveDyedMaterials || new Map();
 
 // Safely ensure Material.prototype has a resilient userData getter/setter to prevent OutlineEffect crashes
+
 function spkmodEnsureMaterialPrototypeSafety(sampleMat) {
-	if (!sampleMat || window.__spkmodMaterialSafetyHooked) return;
-	try {
-		const targetMat = Array.isArray(sampleMat) ? sampleMat[0] : sampleMat;
-		if (!targetMat) return;
-		let proto = Object.getPrototypeOf(targetMat);
-		let baseProto = null;
-		while (proto && proto !== Object.prototype) {
-			baseProto = proto;
-			proto = Object.getPrototypeOf(proto);
-		}
-		if (baseProto && !baseProto.__spkmodUserDataHooked) {
-			baseProto.__spkmodUserDataHooked = true;
-			Object.defineProperty(baseProto, 'userData', {
-				get() {
-					if (!this.__spkmodUserData) this.__spkmodUserData = {};
-					return this.__spkmodUserData;
-				},
-				set(val) {
-					this.__spkmodUserData = (val && typeof val === 'object') ? val : {};
-				},
-				configurable: true,
-				enumerable: true
-			});
-			window.__spkmodMaterialSafetyHooked = true;
-		}
-	} catch (_) {}
+    if (!sampleMat) return;
+
+    const materials = Array.isArray(sampleMat)
+        ? sampleMat
+        : [sampleMat];
+
+    for (const mat of materials) {
+        if (!mat || typeof mat !== "object") continue;
+
+        try {
+            if (
+                !mat.userData ||
+                typeof mat.userData !== "object" ||
+                Array.isArray(mat.userData)
+            ) {
+                mat.userData = {};
+            }
+        } catch (err) {
+            console.warn(
+                "[SpeakiMod+] Material userData initialization failed:",
+                err
+            );
+        }
+    }
 }
+
 
 function spkmodIsOutlineMaterial(mat) {
 	if (!mat) return false;
