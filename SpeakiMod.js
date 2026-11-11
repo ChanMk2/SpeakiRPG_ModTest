@@ -27001,31 +27001,51 @@ function hookRemotePlayersOnce() {
         const originalClear = remoteMap.clear.bind(remoteMap);
 
         remoteMap.set = function(key, value) {
-            if (value?.info && typeof value.info.name === "string") {
-                value.info.name = filterName(value.info.name);
-            }
+			const result = originalSet(key, value);
 
-            hookKnownBotPlayerEmotes(value);
-
-            if (typeof window.spkmodSanitizeRemotePlayers === "function") {
-                window.spkmodSanitizeRemotePlayers();
-            }
-
-            const result = originalSet(key, value);
-
-            if (value) {
-                value.__spkmodNametagManaged = true;
-                hookNametagAvatarReplacement(value);
-
-                if (value.avatar) hookAvatarLabel(value);
-
-                applyPlayerNametagVisibility(value);
-            }
-
-            updateKnownBotVisibility();
-
-            return result;
-        };
+    		try {
+				if (value?.info && typeof value.info.name === "string") {
+					value.info.name = filterName(value.info.name);
+				}
+			} catch (err) {
+				console.warn("[SpeakiMod+] Name hook failed:", err);
+			}
+			
+			try {
+				hookKnownBotPlayerEmotes(value);
+			} catch (err) {
+				console.warn("[SpeakiMod+] Emote hook failed:", err);
+			}
+			
+			try {
+				if (typeof window.spkmodSanitizeRemotePlayers === "function") {
+					window.spkmodSanitizeRemotePlayers();
+				}
+			} catch (err) {
+				console.warn("[SpeakiMod+] Material cleanup failed:", err);
+			}
+			
+			try {
+				if (value) {
+					value.__spkmodNametagManaged = true;
+					hookNametagAvatarReplacement(value);
+					if (value.avatar) {
+						hookAvatarLabel(value);
+					}
+					applyPlayerNametagVisibility(value);
+				}
+			} catch (err) {
+				console.warn("[SpeakiMod+] Nametag hook failed:", err);
+			}
+			
+			try {
+				updateKnownBotVisibility();
+			} catch (err) {
+				console.warn("[SpeakiMod+] Visibility hook failed:", err);
+			}
+			
+			return result;
+		};
 
         remoteMap.delete = function(key) {
             const result = originalDelete(key);
